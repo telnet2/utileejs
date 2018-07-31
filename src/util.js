@@ -9,6 +9,6 @@ function camelCaseString(snakeCase) {
     return snakeCase;
 }
 
-exports = {
+module.exports = {
     camelCaseString
 }

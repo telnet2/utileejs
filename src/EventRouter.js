@@ -2,6 +2,10 @@ const EventEmitter = require('eventemitter3');
 const { camelCaseString } = require('./util');
 
 class EventRouter extends EventEmitter {
+    /**
+     * 
+     * @param {string[]} events 
+     */
     registerEvents(events) {
         if (events && events.forEach) {
             events.forEach((e, i) => {
