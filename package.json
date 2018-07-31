@@ -1,11 +1,11 @@
 {
     "name": "utileejs",
-    "version": "0.0.4",
+    "version": "0.0.5",
     "description": "Useful JS utilities",
     "main": "index.js",
     "files": [
         "index.js",
-        "src"
+        "lib"
     ],
     "repository": "git@github.com:telnet2/utileejs.git",
     "author": "Joohwi Lee <telnet2@gmail.com>",
@@ -14,8 +14,14 @@
         "eventemitter3": "^3.1.0"
     },
     "devDependencies": {
+        "babel-cli": "^6.26.0",
+        "babel-preset-env": "^1.7.0",
         "chai": "^4.1.2",
         "mocha": "^5.2.0",
-        "mocha-logger": "^1.0.6"
+        "mocha-logger": "^1.0.6",
+        "typescript": "^3.0.1"
+    },
+    "scripts": {
+        "build": "npx babel src -d lib --minified"
     }
 }
