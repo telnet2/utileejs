@@ -1,7 +1,5 @@
-const EventRouter = require('./src/EventRouter');
-const { camelCaseString } = require('./src/util');
+const EventRouter = require('./lib/EventRouter');
 
 module.exports = {
-    EventRouter,
-    camelCaseString
+    EventRouter: EventRouter,
 }
