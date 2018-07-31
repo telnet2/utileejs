@@ -1,0 +1,2 @@
+# utileejs
+Useful JS utilities
