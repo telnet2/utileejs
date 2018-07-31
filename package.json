@@ -1,6 +1,6 @@
 {
     "name": "utileejs",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "description": "Useful JS utilities",
     "main": "index.js",
     "files": [
@@ -11,8 +11,10 @@
     "author": "Joohwi Lee <telnet2@gmail.com>",
     "license": "EPL-2.0",
     "dependencies": {
+        "eventemitter3": "^3.1.0"
+    },
+    "devDependencies": {
         "chai": "^4.1.2",
-        "eventemitter3": "^3.1.0",
         "mocha": "^5.2.0",
         "mocha-logger": "^1.0.6"
     }
