@@ -3,8 +3,8 @@ const { camelCaseString } = require('./util');
 
 class EventRouter extends EventEmitter {
     /**
-     * 
-     * @param {string[]} events 
+     *
+     * @param {string[]} events
      */
     registerEvents(events) {
         if (events && events.forEach) {
