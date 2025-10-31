@@ -1,11 +1,16 @@
 {
     "name": "@autox/utileejs",
     "version": "0.0.7",
-    "description": "Useful JS utilities",
+    "description": "Useful JS utilities including in-memory filesystem and shell",
     "main": "index.js",
+    "bin": {
+        "memsh": "./bin/memsh"
+    },
     "files": [
         "index.js",
-        "lib"
+        "lib",
+        "src",
+        "bin"
     ],
     "repository": "git@github.com:telnet2/utileejs.git",
     "author": "Joohwi Lee <telnet2@gmail.com>",
@@ -22,6 +27,7 @@
         "typescript": "^3.0.1"
     },
     "scripts": {
-        "build": "npx babel src -d lib --minified"
+        "build": "npx babel src -d lib --minified",
+        "test": "npx mocha test/*.test.js"
     }
 }
