@@ -18,6 +18,7 @@ An interactive shell with POSIX-like commands:
 - **Search & Manipulation**: `grep`, `find`, `sed`
 - **Import/Export**: `import`, `export`
 - **Execution**: `node` (run JavaScript in the memory filesystem)
+- **Advanced**: Pipes (`|`) and HEREDOC (`<<`) support
 
 ### Interactive Shell (MemREPL)
 A full-featured REPL interface for interactive file system manipulation.
@@ -216,6 +217,130 @@ Exit the shell
 ```bash
 $ exit
 ```
+
+### Advanced Features
+
+#### Pipes (`|`)
+Chain commands together, passing output from one command as input to the next.
+
+**Syntax:** `command1 | command2 | command3`
+
+**Examples:**
+```bash
+# Filter file contents
+$ cat file.txt | grep error
+
+# Chain multiple filters
+$ cat log.txt | grep ERROR | sed s/ERROR/CRITICAL/g
+
+# Count matching lines
+$ cat data.txt | grep pattern | wc -l
+
+# Find and filter
+$ ls | grep ".js"
+
+# Process with line numbers
+$ cat file.txt | grep -n important
+```
+
+**Supported Commands:**
+- `cat` - Can receive stdin when no files specified or with `-`
+- `grep` - Can search stdin when no files specified
+- `sed` - Can transform stdin when no file specified
+- Any command can be piped to these commands
+
+#### HEREDOC (`<<`)
+Multi-line input delimiter for creating documents inline.
+
+**Syntax:**
+```bash
+command << DELIMITER
+content line 1
+content line 2
+...
+DELIMITER
+```
+
+**Interactive Mode:**
+```bash
+$ cat << EOF
+> This is line 1
+> This is line 2
+> EOF
+This is line 1
+This is line 2
+```
+
+**Inline Mode (in scripts/programmatic usage):**
+```javascript
+shell.exec(`cat << EOF
+line 1
+line 2
+EOF`);
+```
+
+**Examples:**
+
+Create a file with multi-line content:
+```bash
+$ write config.yaml << END
+> server:
+>   host: localhost
+>   port: 8080
+> database:
+>   name: mydb
+> END
+```
+
+Search through inline content:
+```bash
+$ grep error << DATA
+> normal line
+> error occurred here
+> another normal line
+> DATA
+error occurred here
+```
+
+Transform inline content:
+```bash
+$ sed s/old/new/g << TEXT
+> old value 1
+> old value 2
+> TEXT
+new value 1
+new value 2
+```
+
+#### Combining Pipes and HEREDOC
+
+Pipe HEREDOC output to other commands:
+```bash
+$ cat << EOF | grep pattern | sed s/find/replace/g
+> line with pattern and find
+> another line
+> line with pattern
+> EOF
+```
+
+Complex pipeline example:
+```bash
+$ cat << DATA | grep -n error | sed s/error/ERROR/g
+> normal operation
+> error in system
+> processing continues
+> error detected
+> DATA
+2:ERROR in system
+4:ERROR detected
+```
+
+**Use Cases:**
+- **Testing**: Create test data inline without external files
+- **Configuration**: Generate config files programmatically
+- **Data Processing**: Process multi-line data in pipelines
+- **Scripting**: Embed documents in shell scripts
+- **Prototyping**: Quickly test text transformations
 
 ## API Reference
 

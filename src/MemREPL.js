@@ -1,6 +1,7 @@
 const readline = require('readline');
 const { MemFS } = require('./MemFS');
 const { MemShell } = require('./MemShell');
+const { parseHeredoc } = require('./CommandParser');
 
 /**
  * REPL (Read-Eval-Print Loop) interface for MemShell
@@ -11,12 +12,19 @@ class MemREPL {
         this.rl = null;
         this.running = false;
         this.history = [];
+        this.heredocMode = false;
+        this.heredocCommand = '';
+        this.heredocDelimiter = '';
+        this.heredocContent = [];
     }
 
     /**
      * Get the prompt string
      */
     getPrompt() {
+        if (this.heredocMode) {
+            return '> ';
+        }
         const cwd = this.shell.fs.getCurrentDirectory();
         return `memsh:${cwd}$ `;
     }
@@ -65,6 +73,10 @@ Available Commands:
     help                       - Show this help message
     exit, quit                 - Exit the shell
 
+  Advanced Features:
+    Pipes (|)                  - Chain commands together
+    HEREDOC (<<)               - Multi-line input
+
 Examples:
   $ mkdir -p projects/myapp
   $ cd projects/myapp
@@ -74,6 +86,16 @@ Examples:
   $ find . --name "*.js"
   $ import -r /path/to/real/dir mydir
   $ export mydir /path/to/export
+
+  Pipes:
+  $ cat file.txt | grep "error" | sed s/error/warning/g
+  $ ls | grep ".js"
+
+  HEREDOC:
+  $ cat << EOF
+  > line 1
+  > line 2
+  > EOF
 `;
         console.log(help);
     }
@@ -82,6 +104,38 @@ Examples:
      * Handle a command
      */
     handleCommand(line) {
+        // If in HEREDOC mode, collect content
+        if (this.heredocMode) {
+            const trimmed = line.trim();
+
+            // Check if this is the delimiter
+            if (trimmed === this.heredocDelimiter) {
+                // End of HEREDOC - execute command
+                this.heredocMode = false;
+                const content = this.heredocContent.join('\n');
+                const fullCommand = `${this.heredocCommand} << ${this.heredocDelimiter}\n${content}\n${this.heredocDelimiter}`;
+
+                try {
+                    const result = this.shell.execWithHeredoc(this.heredocCommand, content);
+                    if (result) {
+                        console.log(result);
+                    }
+                } catch (err) {
+                    console.error(err.message);
+                }
+
+                // Reset heredoc state
+                this.heredocCommand = '';
+                this.heredocDelimiter = '';
+                this.heredocContent = [];
+                return;
+            }
+
+            // Add line to heredoc content
+            this.heredocContent.push(line);
+            return;
+        }
+
         const trimmed = line.trim();
 
         if (!trimmed) {
@@ -111,6 +165,17 @@ Examples:
             this.history.forEach((cmd, i) => {
                 console.log(`${i + 1}  ${cmd}`);
             });
+            return;
+        }
+
+        // Check for HEREDOC
+        const heredocInfo = parseHeredoc(trimmed);
+        if (heredocInfo) {
+            // Enter HEREDOC mode
+            this.heredocMode = true;
+            this.heredocCommand = heredocInfo.command;
+            this.heredocDelimiter = heredocInfo.delimiter;
+            this.heredocContent = [];
             return;
         }
 

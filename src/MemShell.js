@@ -1,5 +1,6 @@
 const { MemFS } = require('./MemFS');
 const { VM } = require('vm');
+const { parsePipeline, isInlineHeredoc, parseInlineHeredoc } = require('./CommandParser');
 
 /**
  * Shell-like command interface for MemFS
@@ -7,6 +8,7 @@ const { VM } = require('vm');
 class MemShell {
     constructor(memfs = null) {
         this.fs = memfs || new MemFS();
+        this.stdin = null; // For piped input
     }
 
     /**
@@ -80,16 +82,27 @@ class MemShell {
 
     /**
      * cat - concatenate and display file contents
+     * If stdin is provided and no files, use stdin
      */
-    cat(args) {
+    cat(args, stdin = null) {
         const { positional } = this.parseArgs(args);
 
+        // If no files specified and stdin is available, use stdin
         if (positional.length === 0) {
+            if (stdin !== null && stdin !== undefined) {
+                return stdin;
+            }
             throw new Error('cat: missing file operand');
         }
 
         const outputs = [];
         for (const pathStr of positional) {
+            // Support "-" to read from stdin
+            if (pathStr === '-' && stdin !== null && stdin !== undefined) {
+                outputs.push(stdin);
+                continue;
+            }
+
             const node = this.fs.resolvePath(pathStr);
             if (!node) {
                 throw new Error(`cat: ${pathStr}: No such file or directory`);
@@ -189,8 +202,9 @@ class MemShell {
 
     /**
      * grep - search for patterns in files
+     * If stdin is provided and no files, use stdin
      */
-    grep(args) {
+    grep(args, stdin = null) {
         const { flags, positional } = this.parseArgs(args);
 
         if (positional.length === 0) {
@@ -199,6 +213,24 @@ class MemShell {
 
         const pattern = positional[0];
         const files = positional.slice(1);
+
+        // If no files and stdin is available, use stdin
+        if (files.length === 0 && stdin !== null && stdin !== undefined) {
+            const content = stdin;
+            const lines = content.split('\n');
+            const matchedLines = [];
+            const regex = new RegExp(pattern, flags.i ? 'gi' : 'g');
+
+            lines.forEach((line, index) => {
+                if (regex.test(line)) {
+                    const lineNum = flags.n ? `${index + 1}:` : '';
+                    matchedLines.push(`${lineNum}${line}`);
+                }
+                regex.lastIndex = 0;
+            });
+
+            return matchedLines.join('\n');
+        }
 
         if (files.length === 0) {
             throw new Error('grep: missing file operand');
@@ -292,26 +324,17 @@ class MemShell {
 
     /**
      * sed - stream editor for filtering and transforming text
+     * If stdin is provided and no file, use stdin
      */
-    sed(args) {
+    sed(args, stdin = null) {
         const { positional } = this.parseArgs(args);
 
-        if (positional.length < 2) {
+        if (positional.length < 1) {
             throw new Error('sed: missing operand');
         }
 
         const script = positional[0];
         const filePath = positional[1];
-
-        const node = this.fs.resolvePath(filePath);
-        if (!node) {
-            throw new Error(`sed: can't read ${filePath}: No such file or directory`);
-        }
-        if (!node.isFile()) {
-            throw new Error(`sed: ${filePath}: Is a directory`);
-        }
-
-        let content = node.read();
 
         // Parse sed command (support basic s/pattern/replacement/flags)
         const sedMatch = script.match(/^s\/(.+?)\/(.*)\/([gip]*)$/);
@@ -322,6 +345,25 @@ class MemShell {
         const [, pattern, replacement, flagsStr] = sedMatch;
         const flags = flagsStr.includes('i') ? 'gi' : 'g';
         const regex = new RegExp(pattern, flags);
+
+        // If no file specified and stdin is available, use stdin
+        if (!filePath && stdin !== null && stdin !== undefined) {
+            return stdin.replace(regex, replacement);
+        }
+
+        if (!filePath) {
+            throw new Error('sed: missing file operand');
+        }
+
+        const node = this.fs.resolvePath(filePath);
+        if (!node) {
+            throw new Error(`sed: can't read ${filePath}: No such file or directory`);
+        }
+        if (!node.isFile()) {
+            throw new Error(`sed: ${filePath}: Is a directory`);
+        }
+
+        let content = node.read();
 
         if (flagsStr.includes('p')) {
             // Print mode - just return the result
@@ -500,17 +542,15 @@ class MemShell {
     }
 
     /**
-     * Execute a command
+     * Execute a single command with optional stdin
      */
-    exec(commandLine) {
-        if (!commandLine || !commandLine.trim()) {
+    execSingle(commandTokens, stdin = null) {
+        if (!commandTokens || commandTokens.length === 0) {
             return '';
         }
 
-        // Simple command parsing (doesn't handle complex shell features)
-        const parts = commandLine.trim().split(/\s+/);
-        const command = parts[0];
-        const args = parts.slice(1);
+        const command = commandTokens[0];
+        const args = commandTokens.slice(1);
 
         const commands = {
             ls: this.ls.bind(this),
@@ -534,7 +574,121 @@ class MemShell {
             throw new Error(`${command}: command not found`);
         }
 
+        // Check if command supports stdin
+        const stdinCommands = ['cat', 'grep', 'sed'];
+        if (stdinCommands.includes(command) && stdin !== null) {
+            return commands[command](args, stdin);
+        }
+
         return commands[command](args);
+    }
+
+    /**
+     * Execute a pipeline of commands
+     */
+    execPipeline(pipeline) {
+        if (pipeline.length === 0) {
+            return '';
+        }
+
+        let output = null;
+
+        for (let i = 0; i < pipeline.length; i++) {
+            const commandTokens = pipeline[i];
+            output = this.execSingle(commandTokens, output);
+        }
+
+        return output;
+    }
+
+    /**
+     * Execute a command with HEREDOC support
+     */
+    execWithHeredoc(command, content) {
+        // Parse the command
+        const tokens = command.trim().split(/\s+/);
+        const cmd = tokens[0];
+        const args = tokens.slice(1);
+
+        const commands = {
+            cat: this.cat.bind(this),
+            grep: this.grep.bind(this),
+            sed: this.sed.bind(this),
+            write: (args) => {
+                const filePath = args[0];
+                if (!filePath) {
+                    throw new Error('write: missing file operand');
+                }
+                const node = this.fs.resolvePath(filePath);
+                if (node) {
+                    if (!node.isFile()) {
+                        throw new Error(`write: ${filePath}: Is a directory`);
+                    }
+                    node.write(content);
+                } else {
+                    this.fs.createFile(filePath, content);
+                }
+                return '';
+            },
+        };
+
+        if (!commands[cmd]) {
+            throw new Error(`${cmd}: command not found or does not support HEREDOC`);
+        }
+
+        // For cat, grep, sed - pass content as stdin
+        if (['cat', 'grep', 'sed'].includes(cmd)) {
+            return commands[cmd](args, content);
+        }
+
+        // For write and others, execute with args
+        return commands[cmd](args);
+    }
+
+    /**
+     * Execute a command
+     */
+    exec(commandLine) {
+        if (!commandLine || !commandLine.trim()) {
+            return '';
+        }
+
+        // Check for inline HEREDOC first (before tokenization)
+        if (isInlineHeredoc(commandLine)) {
+            const heredocInfo = parseInlineHeredoc(commandLine);
+            if (heredocInfo) {
+                // Check if there's a pipe after the HEREDOC
+                const pipeIndex = commandLine.indexOf('|', commandLine.lastIndexOf(heredocInfo.content));
+                if (pipeIndex > 0) {
+                    // Extract the pipeline after HEREDOC
+                    const remainingPipeline = commandLine.substring(pipeIndex + 1).trim();
+                    if (remainingPipeline) {
+                        // Execute HEREDOC and pipe to remaining commands
+                        const heredocOutput = this.execWithHeredoc(heredocInfo.command, heredocInfo.content);
+                        const pipeline = parsePipeline(remainingPipeline);
+                        // Create synthetic pipeline starting with heredoc output
+                        let output = heredocOutput;
+                        for (const commandTokens of pipeline) {
+                            output = this.execSingle(commandTokens, output);
+                        }
+                        return output;
+                    }
+                }
+                // No pipe, just execute HEREDOC
+                return this.execWithHeredoc(heredocInfo.command, heredocInfo.content);
+            }
+        }
+
+        // Check for pipes
+        const pipeline = parsePipeline(commandLine);
+
+        if (pipeline.length > 1) {
+            // Execute as pipeline
+            return this.execPipeline(pipeline);
+        }
+
+        // Execute single command
+        return this.execSingle(pipeline[0]);
     }
 }
 

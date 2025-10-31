@@ -325,6 +325,88 @@ describe('MemShell - Shell Commands', () => {
         });
     });
 
+    describe('Pipes', () => {
+        it('should pipe cat to grep', () => {
+            shell.fs.createFile('test.txt', 'line1\nline2 error\nline3\nline4 error');
+            const output = shell.exec('cat test.txt | grep error');
+            expect(output).to.include('line2 error');
+            expect(output).to.include('line4 error');
+            expect(output).to.not.include('line1');
+            expect(output).to.not.include('line3');
+        });
+
+        it('should chain multiple pipes', () => {
+            shell.fs.createFile('data.txt', 'Hello World\nHello Universe\nGoodbye World');
+            const output = shell.exec('cat data.txt | grep Hello | sed s/Hello/Hi/g');
+            expect(output).to.include('Hi World');
+            expect(output).to.include('Hi Universe');
+            expect(output).to.not.include('Goodbye');
+        });
+
+        it('should pipe echo to grep', () => {
+            const output = shell.exec('echo "test line error" | grep error');
+            expect(output).to.equal('test line error');
+        });
+
+        it('should pipe cat to sed', () => {
+            shell.fs.createFile('test.txt', 'foo bar foo');
+            const output = shell.exec('cat test.txt | sed s/foo/baz/g');
+            expect(output).to.equal('baz bar baz');
+        });
+
+        it('should handle pipe with line numbers', () => {
+            shell.fs.createFile('test.txt', 'line1\ntest\nline3\ntest');
+            const output = shell.exec('cat test.txt | grep -n test');
+            expect(output).to.include('2:test');
+            expect(output).to.include('4:test');
+        });
+    });
+
+    describe('HEREDOC', () => {
+        it('should handle inline HEREDOC with cat', () => {
+            const output = shell.exec('cat << EOF\nline 1\nline 2\nline 3\nEOF');
+            expect(output).to.equal('line 1\nline 2\nline 3');
+        });
+
+        it('should handle HEREDOC with grep', () => {
+            const output = shell.exec('grep error << EOF\nno match\nerror line\nanother error\nEOF');
+            expect(output).to.include('error line');
+            expect(output).to.include('another error');
+            expect(output).to.not.include('no match');
+        });
+
+        it('should handle HEREDOC with sed', () => {
+            const output = shell.exec('sed s/old/new/g << EOF\nold text\nold again\nEOF');
+            expect(output).to.equal('new text\nnew again');
+        });
+
+        it('should create file with HEREDOC using write', () => {
+            shell.exec('write test.txt << EOF\nmultiline\ncontent\nhere\nEOF');
+            const node = shell.fs.resolvePath('test.txt');
+            expect(node).to.not.be.null;
+            expect(node.read()).to.equal('multiline\ncontent\nhere');
+        });
+
+        it('should handle HEREDOC with different delimiter', () => {
+            const output = shell.exec('cat << END\nsome content\nmore content\nEND');
+            expect(output).to.equal('some content\nmore content');
+        });
+    });
+
+    describe('Pipes and HEREDOC combined', () => {
+        it('should pipe HEREDOC output to grep', () => {
+            const output = shell.exec('cat << EOF\nline one\nerror here\nline three\nEOF | grep error');
+            expect(output).to.equal('error here');
+        });
+
+        it('should chain HEREDOC through multiple pipes', () => {
+            const output = shell.exec('cat << EOF\nHello World\nTest Line\nHello Again\nEOF | grep Hello | sed s/Hello/Hi/g');
+            expect(output).to.include('Hi World');
+            expect(output).to.include('Hi Again');
+            expect(output).to.not.include('Test Line');
+        });
+    });
+
     describe('Error handling', () => {
         it('should throw error for unknown command', () => {
             expect(() => shell.exec('unknowncommand')).to.throw(/command not found/);
