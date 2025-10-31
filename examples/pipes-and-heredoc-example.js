@@ -160,6 +160,107 @@ console.log('$ node script.js');
 console.log(shell.exec('node script.js'));
 console.log('');
 
+// Example 11: Output Redirection with >
+console.log('Example 11: Output Redirection (Overwrite)');
+console.log('------------------------------------------');
+console.log('$ echo "Hello World" > greeting.txt');
+shell.exec('echo "Hello World" > greeting.txt');
+console.log('$ cat greeting.txt');
+console.log(shell.exec('cat greeting.txt'));
+console.log('');
+
+// Example 12: Output Redirection with >> (Append)
+console.log('Example 12: Output Redirection (Append)');
+console.log('---------------------------------------');
+console.log('$ echo "Line 1" > output.txt');
+shell.exec('echo "Line 1" > output.txt');
+console.log('$ echo "Line 2" >> output.txt');
+shell.exec('echo "Line 2" >> output.txt');
+console.log('$ echo "Line 3" >> output.txt');
+shell.exec('echo "Line 3" >> output.txt');
+console.log('$ cat output.txt');
+console.log(shell.exec('cat output.txt'));
+console.log('');
+
+// Example 13: POSIX-Compliant HEREDOC with Output Redirection
+console.log('Example 13: POSIX-Compliant HEREDOC with Output Redirection');
+console.log('-----------------------------------------------------------');
+const posixHeredoc = `cat > config.yaml << EOF
+server:
+  host: localhost
+  port: 8080
+database:
+  connection: postgresql
+  pool: 10
+EOF`;
+console.log('$ cat > config.yaml << EOF');
+console.log('> server:');
+console.log('>   host: localhost');
+console.log('>   port: 8080');
+console.log('> database:');
+console.log('>   connection: postgresql');
+console.log('>   pool: 10');
+console.log('> EOF');
+shell.exec(posixHeredoc);
+console.log('$ cat config.yaml');
+console.log(shell.exec('cat config.yaml'));
+console.log('');
+
+// Example 14: Redirect Piped Output
+console.log('Example 14: Redirect Piped Output');
+console.log('---------------------------------');
+shell.fs.createFile('events.txt', 'INFO: Started\nERROR: Failed\nWARN: Retry\nERROR: Timeout\nINFO: Complete');
+console.log('$ cat events.txt | grep ERROR > errors.txt');
+shell.exec('cat events.txt | grep ERROR > errors.txt');
+console.log('$ cat errors.txt');
+console.log(shell.exec('cat errors.txt'));
+console.log('');
+
+// Example 15: Append with HEREDOC
+console.log('Example 15: Append with HEREDOC');
+console.log('--------------------------------');
+console.log('$ cat >> changelog.txt << END');
+console.log('> ## Version 1.0.0');
+console.log('> - Initial release');
+console.log('> END');
+shell.exec(`cat >> changelog.txt << END
+## Version 1.0.0
+- Initial release
+END`);
+console.log('$ cat >> changelog.txt << END');
+console.log('> ## Version 1.1.0');
+console.log('> - Added new features');
+console.log('> END');
+shell.exec(`cat >> changelog.txt << END
+## Version 1.1.0
+- Added new features
+END`);
+console.log('$ cat changelog.txt');
+console.log(shell.exec('cat changelog.txt'));
+console.log('');
+
+// Example 16: Complex Pipeline with Output Redirection
+console.log('Example 16: Complex Pipeline with Output Redirection');
+console.log('---------------------------------------------------');
+const complexData = `cat << DATA | grep error | sed s/error/ERROR/g > processed-errors.txt
+Line 1: normal operation
+Line 2: error detected
+Line 3: processing continues
+Line 4: error in module
+Line 5: success
+DATA`;
+console.log('$ cat << DATA | grep error | sed s/error/ERROR/g > processed-errors.txt');
+console.log('> Line 1: normal operation');
+console.log('> Line 2: error detected');
+console.log('> Line 3: processing continues');
+console.log('> Line 4: error in module');
+console.log('> Line 5: success');
+console.log('> DATA');
+shell.exec(complexData);
+console.log('$ cat processed-errors.txt');
+console.log(shell.exec('cat processed-errors.txt'));
+console.log('');
+
 console.log('===== Examples Complete =====');
-console.log('\nPipes and HEREDOC make the shell much more powerful!');
+console.log('\nPipes, HEREDOC, and Output Redirection make the shell much more powerful!');
 console.log('Try them out in the interactive shell: ./bin/memsh');

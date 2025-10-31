@@ -48,6 +48,66 @@ function tokenize(commandLine) {
                 continue;
             }
 
+            // Handle redirection operators
+            if (char === '>') {
+                if (current) {
+                    tokens.push(current);
+                    current = '';
+                }
+                // Check for >> or >&
+                if (i + 1 < commandLine.length) {
+                    const nextChar = commandLine[i + 1];
+                    if (nextChar === '>') {
+                        tokens.push('>>');
+                        i++;
+                        continue;
+                    } else if (nextChar === '&') {
+                        tokens.push('>&');
+                        i++;
+                        continue;
+                    }
+                }
+                tokens.push('>');
+                continue;
+            }
+
+            if (char === '<') {
+                if (current) {
+                    tokens.push(current);
+                    current = '';
+                }
+                // Check for <<
+                if (i + 1 < commandLine.length && commandLine[i + 1] === '<') {
+                    tokens.push('<<');
+                    i++;
+                    continue;
+                }
+                tokens.push('<');
+                continue;
+            }
+
+            // Handle 2> for stderr redirection
+            if (char === '2' && i + 1 < commandLine.length && commandLine[i + 1] === '>') {
+                if (current) {
+                    tokens.push(current);
+                    current = '';
+                }
+                tokens.push('2>');
+                i++;
+                continue;
+            }
+
+            // Handle &> for stdout+stderr redirection
+            if (char === '&' && i + 1 < commandLine.length && commandLine[i + 1] === '>') {
+                if (current) {
+                    tokens.push(current);
+                    current = '';
+                }
+                tokens.push('&>');
+                i++;
+                continue;
+            }
+
             if (char === ' ' || char === '\t') {
                 if (current) {
                     tokens.push(current);
@@ -92,6 +152,45 @@ function parsePipeline(commandLine) {
     }
 
     return pipeline;
+}
+
+/**
+ * Parse redirections from command tokens
+ * Returns { command: [...], redirections: [{type, target}] }
+ */
+function parseRedirections(tokens) {
+    const command = [];
+    const redirections = [];
+
+    for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i];
+
+        // Check if this is a redirection operator
+        if (token === '>' || token === '>>' || token === '<' ||
+            token === '2>' || token === '&>' || token === '>&') {
+            // Next token should be the target file
+            if (i + 1 < tokens.length) {
+                redirections.push({
+                    type: token,
+                    target: tokens[i + 1]
+                });
+                i++; // Skip the target token
+            }
+        } else if (token === '<<') {
+            // HEREDOC delimiter
+            if (i + 1 < tokens.length) {
+                redirections.push({
+                    type: '<<',
+                    delimiter: tokens[i + 1]
+                });
+                i++; // Skip the delimiter token
+            }
+        } else {
+            command.push(token);
+        }
+    }
+
+    return { command, redirections };
 }
 
 /**
@@ -171,6 +270,7 @@ function isInlineHeredoc(commandLine) {
  * Parse inline HEREDOC (contains newlines in the command string)
  */
 function parseInlineHeredoc(commandLine) {
+    // First try: exact format with delimiter on its own line
     const heredocMatch = commandLine.match(/^(.+?)\s*<<\s*(\S+)\s*\n([\s\S]*?)^\2$/m);
 
     if (heredocMatch) {
@@ -179,26 +279,48 @@ function parseInlineHeredoc(commandLine) {
         if (content.endsWith('\n')) {
             content = content.slice(0, -1);
         }
+
+        // Parse command and redirections before <<
+        const beforeHeredoc = heredocMatch[1].trim();
+        const tokens = tokenize(beforeHeredoc);
+        const { command: cmdTokens, redirections: preRedirects } = parseRedirections(tokens);
+
         return {
-            command: heredocMatch[1].trim(),
-            content: content
+            command: cmdTokens.join(' '),
+            content: content,
+            redirect: null,
+            preRedirects: preRedirects
         };
     }
 
-    // Alternative format - find delimiter anywhere in a line
-    const simpleMatch = commandLine.match(/^(.+?)\s*<<\s*(\S+)\s*\n([\s\S]+)$/);
+    // Alternative format - delimiter might have redirections or other content after it
+    // Example: cat << EOF > file.txt or cat > file.txt << EOF
+    const simpleMatch = commandLine.match(/^(.+?)\s*<<\s*(\S+)(.*)?\n([\s\S]+)$/);
     if (simpleMatch) {
-        const content = simpleMatch[3];
+        const beforeHeredoc = simpleMatch[1].trim();
         const delimiter = simpleMatch[2];
+        const firstLineRest = simpleMatch[3] ? simpleMatch[3].trim() : '';
+        const content = simpleMatch[4];
         const lines = content.split('\n');
+
+        // Parse command and redirections before <<
+        const tokens = tokenize(beforeHeredoc);
+        const { command: cmdTokens, redirections: preRedirects } = parseRedirections(tokens);
 
         // Find delimiter - it might have content after it on the same line
         let delimiterIndex = -1;
+        let delimiterLineRest = '';
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
             // Check if line starts with delimiter (possibly followed by space and more content)
-            if (line === delimiter || line.startsWith(delimiter + ' ') || line.startsWith(delimiter + '\t')) {
+            if (line === delimiter) {
                 delimiterIndex = i;
+                break;
+            } else if (line.startsWith(delimiter + ' ') || line.startsWith(delimiter + '\t')) {
+                delimiterIndex = i;
+                // Capture everything after the delimiter
+                const delimiterEnd = line.indexOf(delimiter) + delimiter.length;
+                delimiterLineRest = line.substring(delimiterEnd).trim();
                 break;
             }
         }
@@ -207,9 +329,21 @@ function parseInlineHeredoc(commandLine) {
             ? lines.slice(0, delimiterIndex).join('\n')
             : content;
 
+        // Combine redirects from first line and delimiter line
+        let finalRedirect = null;
+        if (firstLineRest && delimiterLineRest) {
+            finalRedirect = firstLineRest + ' ' + delimiterLineRest;
+        } else if (firstLineRest) {
+            finalRedirect = firstLineRest;
+        } else if (delimiterLineRest) {
+            finalRedirect = delimiterLineRest;
+        }
+
         return {
-            command: simpleMatch[1].trim(),
-            content: actualContent
+            command: cmdTokens.join(' '),
+            content: actualContent,
+            redirect: finalRedirect,
+            preRedirects: preRedirects
         };
     }
 
@@ -219,6 +353,7 @@ function parseInlineHeredoc(commandLine) {
 module.exports = {
     tokenize,
     parsePipeline,
+    parseRedirections,
     parseHeredoc,
     parseHeredocContent,
     isInlineHeredoc,

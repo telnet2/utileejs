@@ -407,6 +407,78 @@ describe('MemShell - Shell Commands', () => {
         });
     });
 
+    describe('Output Redirection', () => {
+        it('should redirect output to file with >', () => {
+            shell.exec('echo Hello World > test.txt');
+            const node = shell.fs.resolvePath('test.txt');
+            expect(node).to.not.be.null;
+            expect(node.read()).to.equal('Hello World');
+        });
+
+        it('should overwrite existing file with >', () => {
+            shell.fs.createFile('test.txt', 'old content');
+            shell.exec('echo new content > test.txt');
+            const node = shell.fs.resolvePath('test.txt');
+            expect(node.read()).to.equal('new content');
+        });
+
+        it('should append to file with >>', () => {
+            shell.fs.createFile('test.txt', 'line 1');
+            shell.exec('echo line 2 >> test.txt');
+            const node = shell.fs.resolvePath('test.txt');
+            expect(node.read()).to.equal('line 1\nline 2');
+        });
+
+        it('should create file if it does not exist with >>', () => {
+            shell.exec('echo first line >> newfile.txt');
+            const node = shell.fs.resolvePath('newfile.txt');
+            expect(node).to.not.be.null;
+            expect(node.read()).to.equal('first line');
+        });
+
+        it('should redirect cat output to file', () => {
+            shell.fs.createFile('source.txt', 'file contents');
+            shell.exec('cat source.txt > dest.txt');
+            const node = shell.fs.resolvePath('dest.txt');
+            expect(node.read()).to.equal('file contents');
+        });
+
+        it('should redirect grep output to file', () => {
+            shell.fs.createFile('data.txt', 'line1\nerror here\nline3');
+            shell.exec('grep error data.txt > results.txt');
+            const node = shell.fs.resolvePath('results.txt');
+            expect(node.read()).to.equal('error here');
+        });
+
+        it('should redirect piped output to file', () => {
+            shell.fs.createFile('data.txt', 'foo bar foo');
+            shell.exec('cat data.txt | sed s/foo/baz/g > output.txt');
+            const node = shell.fs.resolvePath('output.txt');
+            expect(node.read()).to.equal('baz bar baz');
+        });
+
+        it('should handle HEREDOC with output redirection (POSIX)', () => {
+            shell.exec('cat > config.txt << EOF\nserver: localhost\nport: 8080\nEOF');
+            const node = shell.fs.resolvePath('config.txt');
+            expect(node).to.not.be.null;
+            expect(node.read()).to.equal('server: localhost\nport: 8080');
+        });
+
+        it('should handle HEREDOC with append redirection', () => {
+            shell.fs.createFile('log.txt', 'existing line');
+            shell.exec('cat >> log.txt << EOF\nnew line 1\nnew line 2\nEOF');
+            const node = shell.fs.resolvePath('log.txt');
+            expect(node.read()).to.equal('existing line\nnew line 1\nnew line 2');
+        });
+
+        it('should handle multiple files in HEREDOC output redirection', () => {
+            shell.exec('cat > script.js << CODE\nconsole.log("Hello");\nconsole.log("World");\nCODE');
+            const node = shell.fs.resolvePath('script.js');
+            expect(node.read()).to.include('console.log("Hello")');
+            expect(node.read()).to.include('console.log("World")');
+        });
+    });
+
     describe('Error handling', () => {
         it('should throw error for unknown command', () => {
             expect(() => shell.exec('unknowncommand')).to.throw(/command not found/);

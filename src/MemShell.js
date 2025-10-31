@@ -1,6 +1,6 @@
 const { MemFS } = require('./MemFS');
 const { VM } = require('vm');
-const { parsePipeline, isInlineHeredoc, parseInlineHeredoc } = require('./CommandParser');
+const { parsePipeline, parseRedirections, isInlineHeredoc, parseInlineHeredoc } = require('./CommandParser');
 
 /**
  * Shell-like command interface for MemFS
@@ -586,16 +586,25 @@ class MemShell {
     /**
      * Execute a pipeline of commands
      */
-    execPipeline(pipeline) {
+    execPipeline(pipeline, initialStdin = null) {
         if (pipeline.length === 0) {
             return '';
         }
 
-        let output = null;
+        let output = initialStdin;
 
         for (let i = 0; i < pipeline.length; i++) {
             const commandTokens = pipeline[i];
-            output = this.execSingle(commandTokens, output);
+
+            // Parse redirections from command tokens
+            const { command, redirections } = parseRedirections(commandTokens);
+
+            // Execute command
+            if (redirections.length > 0) {
+                output = this.execWithRedirections(command, output, redirections);
+            } else {
+                output = this.execSingle(command, output);
+            }
         }
 
         return output;
@@ -646,6 +655,62 @@ class MemShell {
     }
 
     /**
+     * Execute a command with redirections
+     */
+    execWithRedirections(commandTokens, stdin = null, redirections = []) {
+        // Find HEREDOC redirection
+        const heredocRedirect = redirections.find(r => r.type === '<<');
+        let actualStdin = stdin;
+
+        // If there's a HEREDOC, it becomes the stdin
+        if (heredocRedirect) {
+            // For HEREDOC in interactive mode, content will be provided separately
+            // This is just marking that we expect HEREDOC input
+            actualStdin = heredocRedirect.content || stdin;
+        }
+
+        // Execute the command
+        let output = this.execSingle(commandTokens, actualStdin);
+
+        // Handle output redirections
+        for (const redir of redirections) {
+            if (redir.type === '>') {
+                // Redirect stdout to file (overwrite)
+                const node = this.fs.resolvePath(redir.target);
+                if (node && !node.isFile()) {
+                    throw new Error(`${redir.target}: Is a directory`);
+                }
+                if (node) {
+                    node.write(output);
+                } else {
+                    this.fs.createFile(redir.target, output);
+                }
+                output = ''; // Don't return output, it went to file
+            } else if (redir.type === '>>') {
+                // Redirect stdout to file (append)
+                const node = this.fs.resolvePath(redir.target);
+                if (node && !node.isFile()) {
+                    throw new Error(`${redir.target}: Is a directory`);
+                }
+                if (node) {
+                    // Add newline before appending if file has content
+                    const existingContent = node.read();
+                    if (existingContent && existingContent.length > 0) {
+                        node.append('\n' + output);
+                    } else {
+                        node.append(output);
+                    }
+                } else {
+                    this.fs.createFile(redir.target, output);
+                }
+                output = ''; // Don't return output, it went to file
+            }
+        }
+
+        return output;
+    }
+
+    /**
      * Execute a command
      */
     exec(commandLine) {
@@ -657,25 +722,96 @@ class MemShell {
         if (isInlineHeredoc(commandLine)) {
             const heredocInfo = parseInlineHeredoc(commandLine);
             if (heredocInfo) {
-                // Check if there's a pipe after the HEREDOC
-                const pipeIndex = commandLine.indexOf('|', commandLine.lastIndexOf(heredocInfo.content));
-                if (pipeIndex > 0) {
-                    // Extract the pipeline after HEREDOC
-                    const remainingPipeline = commandLine.substring(pipeIndex + 1).trim();
-                    if (remainingPipeline) {
-                        // Execute HEREDOC and pipe to remaining commands
-                        const heredocOutput = this.execWithHeredoc(heredocInfo.command, heredocInfo.content);
-                        const pipeline = parsePipeline(remainingPipeline);
-                        // Create synthetic pipeline starting with heredoc output
-                        let output = heredocOutput;
-                        for (const commandTokens of pipeline) {
-                            output = this.execSingle(commandTokens, output);
+                // Execute HEREDOC command with its content
+                const heredocOutput = this.execWithHeredoc(heredocInfo.command, heredocInfo.content);
+
+                // Collect all redirections (both pre and post)
+                const allRedirections = heredocInfo.preRedirects || [];
+
+                // Check if there's a redirection on the same line as the HEREDOC delimiter
+                if (heredocInfo.redirect) {
+                    // Check if it's a pipe first
+                    if (heredocInfo.redirect.trim().startsWith('|')) {
+                        const remainingPipeline = heredocInfo.redirect.substring(heredocInfo.redirect.indexOf('|') + 1).trim();
+                        if (remainingPipeline) {
+                            const pipeline = parsePipeline(remainingPipeline);
+                            let output = this.execPipeline(pipeline, heredocOutput);
+                            // Apply pre-redirections after pipeline
+                            for (const redir of allRedirections) {
+                                if (redir.type === '>') {
+                                    const node = this.fs.resolvePath(redir.target);
+                                    if (node && !node.isFile()) {
+                                        throw new Error(`${redir.target}: Is a directory`);
+                                    }
+                                    if (node) {
+                                        node.write(output);
+                                    } else {
+                                        this.fs.createFile(redir.target, output);
+                                    }
+                                    output = '';
+                                } else if (redir.type === '>>') {
+                                    const node = this.fs.resolvePath(redir.target);
+                                    if (node && !node.isFile()) {
+                                        throw new Error(`${redir.target}: Is a directory`);
+                                    }
+                                    if (node) {
+                                        // Add newline before appending if file has content
+                                        const existingContent = node.read();
+                                        if (existingContent && existingContent.length > 0) {
+                                            node.append('\n' + output);
+                                        } else {
+                                            node.append(output);
+                                        }
+                                    } else {
+                                        this.fs.createFile(redir.target, output);
+                                    }
+                                    output = '';
+                                }
+                            }
+                            return output;
                         }
-                        return output;
+                    }
+
+                    // Parse the redirection
+                    const tokens = parsePipeline(heredocInfo.redirect)[0];
+                    const { redirections } = parseRedirections(tokens);
+                    allRedirections.push(...redirections);
+                }
+
+                // Apply all redirections to output
+                let finalOutput = heredocOutput;
+                for (const redir of allRedirections) {
+                    if (redir.type === '>') {
+                        const node = this.fs.resolvePath(redir.target);
+                        if (node && !node.isFile()) {
+                            throw new Error(`${redir.target}: Is a directory`);
+                        }
+                        if (node) {
+                            node.write(finalOutput);
+                        } else {
+                            this.fs.createFile(redir.target, finalOutput);
+                        }
+                        finalOutput = '';
+                    } else if (redir.type === '>>') {
+                        const node = this.fs.resolvePath(redir.target);
+                        if (node && !node.isFile()) {
+                            throw new Error(`${redir.target}: Is a directory`);
+                        }
+                        if (node) {
+                            // Add newline before appending if file has content
+                            const existingContent = node.read();
+                            if (existingContent && existingContent.length > 0) {
+                                node.append('\n' + finalOutput);
+                            } else {
+                                node.append(finalOutput);
+                            }
+                        } else {
+                            this.fs.createFile(redir.target, finalOutput);
+                        }
+                        finalOutput = '';
                     }
                 }
-                // No pipe, just execute HEREDOC
-                return this.execWithHeredoc(heredocInfo.command, heredocInfo.content);
+                return finalOutput;
             }
         }
 
@@ -687,8 +823,23 @@ class MemShell {
             return this.execPipeline(pipeline);
         }
 
-        // Execute single command
-        return this.execSingle(pipeline[0]);
+        // Parse redirections from single command
+        const { command, redirections } = parseRedirections(pipeline[0]);
+
+        // Check if there's a HEREDOC redirection
+        const heredocRedirect = redirections.find(r => r.type === '<<');
+        if (heredocRedirect) {
+            // This shouldn't happen with inline HEREDOC, but handle it anyway
+            throw new Error('HEREDOC requires multi-line input in interactive mode');
+        }
+
+        // Execute command with redirections
+        if (redirections.length > 0) {
+            return this.execWithRedirections(command, null, redirections);
+        }
+
+        // Execute single command without redirections
+        return this.execSingle(command);
     }
 }
 

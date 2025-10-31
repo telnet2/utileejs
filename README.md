@@ -342,6 +342,135 @@ $ cat << DATA | grep -n error | sed s/error/ERROR/g
 - **Scripting**: Embed documents in shell scripts
 - **Prototyping**: Quickly test text transformations
 
+#### Output Redirection
+
+Redirect command output to files using POSIX-compliant redirection operators.
+
+**Operators:**
+- `>` - Redirect stdout to file (overwrite)
+- `>>` - Redirect stdout to file (append)
+
+**Syntax:**
+```bash
+command > file.txt           # Overwrite
+command >> file.txt          # Append
+command | other > file.txt   # Redirect piped output
+```
+
+**Examples:**
+
+Redirect output to file:
+```bash
+$ echo "Hello World" > greeting.txt
+$ cat greeting.txt
+Hello World
+```
+
+Append to existing file:
+```bash
+$ echo "Line 1" > log.txt
+$ echo "Line 2" >> log.txt
+$ cat log.txt
+Line 1
+Line 2
+```
+
+Redirect command output:
+```bash
+$ ls -l > directory-listing.txt
+$ grep "error" file.txt > errors.txt
+$ find . --name "*.js" > javascript-files.txt
+```
+
+Redirect piped output:
+```bash
+$ cat data.txt | grep "important" > filtered.txt
+$ cat log.txt | sed s/ERROR/CRITICAL/g > updated-log.txt
+$ cat file.txt | grep -n "TODO" > todo-items.txt
+```
+
+**POSIX-Compliant HEREDOC with Output Redirection:**
+
+The proper POSIX syntax for creating files with HEREDOC uses output redirection:
+
+```bash
+$ cat > config.yaml << EOF
+> server:
+>   host: localhost
+>   port: 8080
+> database:
+>   name: mydb
+> EOF
+$ cat config.yaml
+server:
+  host: localhost
+  port: 8080
+database:
+  name: mydb
+```
+
+Append with HEREDOC:
+```bash
+$ cat >> log.txt << END
+> [INFO] Application started
+> [INFO] Connected to database
+> END
+```
+
+Create JavaScript files:
+```bash
+$ cat > script.js << CODE
+> console.log('Hello, World!');
+> console.log('This is a test');
+> CODE
+$ node script.js
+Hello, World!
+This is a test
+```
+
+**Combined with Pipes:**
+```bash
+# Process and save to file
+$ cat << DATA | grep -n error | sed s/error/ERROR/g > processed.txt
+> normal line
+> error found here
+> another error
+> DATA
+
+# Multiple transformations with output
+$ cat file.txt | grep "pattern" | sed s/old/new/g > result.txt
+```
+
+**Practical Examples:**
+
+Generate and save configuration:
+```bash
+$ cat > .env << ENV
+> DATABASE_URL=postgresql://localhost/mydb
+> API_KEY=secret123
+> DEBUG=true
+> ENV
+```
+
+Create multiple files:
+```bash
+$ echo "# My Project" > README.md
+$ cat > package.json << JSON
+> {
+>   "name": "my-app",
+>   "version": "1.0.0"
+> }
+> JSON
+```
+
+Process and save results:
+```bash
+$ import /path/to/data.csv
+$ cat data.csv | grep "error" > errors.csv
+$ cat data.csv | grep -v "error" > valid.csv
+$ export errors.csv /path/to/errors.csv
+```
+
 ## API Reference
 
 ### MemFS
