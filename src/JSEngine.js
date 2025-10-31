@@ -1,12 +1,11 @@
-/**
- * JSEngine provides a sandboxed JavaScript execution environment that runs code
- * stored inside the MemFS virtual filesystem. It injects a constrained `process`
- * object so scripts cannot reach the host Node.js process while still exposing
- * argv/env values supplied by the caller.
- */
+const path = require('path').posix;
+const { MemFSAdapter } = require('./MemFSAdapter');
+
 class JSEngine {
     constructor(memfs) {
         this.fs = memfs;
+        this.fsAdapter = new MemFSAdapter(memfs);
+        this.moduleCache = new Map();
     }
 
     runScript(scriptPath, options = {}) {
@@ -24,10 +23,12 @@ class JSEngine {
             throw new Error(`'${scriptPath}' is a directory`);
         }
 
+        this.moduleCache.clear();
+
         const code = scriptNode.read();
         const scriptFullPath = scriptNode.getPath();
         const scriptDir = this.#dirname(scriptFullPath);
-        const argv = this.#buildArgv(scriptPath, positionalArgs, flagArgs);
+        const argv = this.#buildArgv(scriptFullPath, positionalArgs, flagArgs);
         const sandboxEnv = Object.freeze({ ...env });
 
         const output = [];
@@ -37,14 +38,19 @@ class JSEngine {
             warn: (...args) => output.push('WARN: ' + args.map((a) => String(a)).join(' ')),
         };
 
-        const sandboxProcess = Object.freeze({
+        const memfs = this.fs;
+        const sandboxProcess = {
             argv,
             env: sandboxEnv,
-            cwd: () => this.fs.getCurrentDirectory(),
+            cwd: () => memfs.getCurrentDirectory(),
+            chdir: (dir) => {
+                memfs.changeDirectory(dir);
+            },
             exit: (code = 0) => {
                 throw new Error(`process.exit is disabled (attempted exit with code ${code})`);
             },
-        });
+        };
+        Object.freeze(sandboxProcess);
 
         const requireFn = (moduleName) => this.#loadModule(moduleName, scriptDir);
 
@@ -59,7 +65,7 @@ class JSEngine {
         };
 
         try {
-            const scriptFunc = new Function(...Object.keys(context), `${code}\n//# sourceURL=${scriptPath}`);
+            const scriptFunc = new Function(...Object.keys(context), `${code}\n//# sourceURL=${scriptFullPath}`);
             scriptFunc(...Object.values(context));
         } catch (error) {
             throw new Error(error.message);
@@ -70,14 +76,12 @@ class JSEngine {
         };
     }
 
-    #buildArgv(scriptPath, positionalArgs, flagArgs) {
-        const args = ['node', scriptPath, ...positionalArgs];
+    #buildArgv(scriptFullPath, positionalArgs, flagArgs) {
+        const args = ['node', scriptFullPath, ...positionalArgs];
 
         if (flagArgs && typeof flagArgs === 'object') {
             for (const [key, value] of Object.entries(flagArgs)) {
-                if (key === undefined || key === null || key === '') {
-                    continue;
-                }
+                if (!key) continue;
                 const prefix = key.length === 1 ? '-' : '--';
                 if (value === true) {
                     args.push(`${prefix}${key}`);
@@ -91,10 +95,49 @@ class JSEngine {
     }
 
     #loadModule(moduleName, baseDir) {
-        const targetPath = this.#resolveToAbsolutePath(moduleName, baseDir);
-        const node = this.fs.resolvePath(targetPath);
+        if (!moduleName) {
+            throw new Error('Cannot require empty module name');
+        }
 
-        if (!node || !node.isFile()) {
+        if (moduleName === 'fs' || moduleName === 'node:fs') {
+            return this.fsAdapter;
+        }
+        if (moduleName === 'fs/promises' || moduleName === 'node:fs/promises') {
+            return this.fsAdapter.promises;
+        }
+        if (moduleName === 'path' || moduleName === 'node:path') {
+            return require('path');
+        }
+        if (moduleName === 'buffer' || moduleName === 'node:buffer') {
+            return require('buffer');
+        }
+
+        const targetPath = this.#resolveToAbsolutePath(moduleName, baseDir);
+        const candidatePaths = [
+            targetPath,
+            `${targetPath}.js`,
+            path.join(targetPath, 'index.js'),
+        ];
+
+        for (const candidate of candidatePaths) {
+            if (this.moduleCache.has(candidate)) {
+                return this.moduleCache.get(candidate);
+            }
+        }
+
+        let resolvedPath = null;
+        let node = null;
+
+        for (const candidate of candidatePaths) {
+            const candidateNode = this.fs.resolvePath(candidate);
+            if (candidateNode && candidateNode.isFile()) {
+                resolvedPath = candidate;
+                node = candidateNode;
+                break;
+            }
+        }
+
+        if (!node) {
             throw new Error(`Cannot find module '${moduleName}'`);
         }
 
@@ -102,48 +145,37 @@ class JSEngine {
         const module = { exports: {} };
         const moduleDir = this.#dirname(node.getPath());
         const localRequire = (name) => this.#loadModule(name, moduleDir);
-        const moduleFunc = new Function('module', 'exports', 'require', moduleCode);
+
+        this.moduleCache.set(resolvedPath, module.exports);
+
+        const moduleFunc = new Function('module', 'exports', 'require', `${moduleCode}\n//# sourceURL=${resolvedPath}`);
         moduleFunc(module, module.exports, localRequire);
+
+        this.moduleCache.set(resolvedPath, module.exports);
         return module.exports;
     }
 
     #resolveToAbsolutePath(request, baseDir) {
-        if (!request || request === '.') {
-            return baseDir;
-        }
-
         if (request.startsWith('/')) {
-            return request;
+            return path.normalize(request);
         }
 
         if (request.startsWith('./') || request.startsWith('../')) {
-            const parts = baseDir === '/' ? [] : baseDir.split('/').filter(Boolean);
-            const segments = request.split('/').filter((part) => part && part !== '.');
-
-            for (const segment of segments) {
-                if (segment === '..') {
-                    parts.pop();
-                } else {
-                    parts.push(segment);
-                }
-            }
-
-            return '/' + parts.join('/');
+            return path.normalize(path.join(baseDir, request));
         }
 
-        return `/${request}`;
+        if (request === '.' || request === '') {
+            return baseDir;
+        }
+
+        return path.normalize(path.join('/', request));
     }
 
     #dirname(fullPath) {
         if (!fullPath || fullPath === '/') {
             return '/';
         }
-        const parts = fullPath.split('/').filter(Boolean);
-        parts.pop();
-        if (parts.length === 0) {
-            return '/';
-        }
-        return '/' + parts.join('/');
+        return path.dirname(fullPath);
     }
 }
 
