@@ -1,5 +1,8 @@
 const { expect } = require('chai');
 const { MemFS, MemFile, MemDirectory } = require('../src/MemFS');
+const realFs = require('fs');
+const path = require('path');
+const os = require('os');
 
 describe('MemFS - In-Memory File System', () => {
     let fs;
@@ -177,6 +180,177 @@ describe('MemFS - In-Memory File System', () => {
             expect(file.isDirectory()).to.be.false;
             expect(dir.isFile()).to.be.false;
             expect(dir.isDirectory()).to.be.true;
+        });
+    });
+
+    describe('Clone Operations', () => {
+        let testDir;
+
+        beforeEach(() => {
+            // Create a unique temporary directory for each test
+            testDir = path.join(os.tmpdir(), `memfs-test-${Date.now()}`);
+        });
+
+        afterEach(() => {
+            // Clean up the test directory
+            if (realFs.existsSync(testDir)) {
+                realFs.rmSync(testDir, { recursive: true, force: true });
+            }
+        });
+
+        it('should clone entire file system to real filesystem', () => {
+            // Create a complex file system structure
+            fs.createDirectory('dir1');
+            fs.createFile('dir1/file1.txt', 'content1');
+            fs.createFile('dir1/file2.txt', 'content2');
+
+            fs.createDirectories('dir2/subdir');
+            fs.createFile('dir2/file3.txt', 'content3');
+            fs.createFile('dir2/subdir/file4.txt', 'content4');
+
+            fs.createFile('root.txt', 'root content');
+
+            // Clone to real filesystem
+            fs.clone(testDir);
+
+            // Verify all files and directories exist
+            expect(realFs.existsSync(testDir)).to.be.true;
+            expect(realFs.existsSync(path.join(testDir, 'dir1'))).to.be.true;
+            expect(realFs.existsSync(path.join(testDir, 'dir1/file1.txt'))).to.be.true;
+            expect(realFs.existsSync(path.join(testDir, 'dir1/file2.txt'))).to.be.true;
+            expect(realFs.existsSync(path.join(testDir, 'dir2'))).to.be.true;
+            expect(realFs.existsSync(path.join(testDir, 'dir2/subdir'))).to.be.true;
+            expect(realFs.existsSync(path.join(testDir, 'dir2/file3.txt'))).to.be.true;
+            expect(realFs.existsSync(path.join(testDir, 'dir2/subdir/file4.txt'))).to.be.true;
+            expect(realFs.existsSync(path.join(testDir, 'root.txt'))).to.be.true;
+
+            // Verify file contents
+            expect(realFs.readFileSync(path.join(testDir, 'dir1/file1.txt'), 'utf8')).to.equal('content1');
+            expect(realFs.readFileSync(path.join(testDir, 'dir1/file2.txt'), 'utf8')).to.equal('content2');
+            expect(realFs.readFileSync(path.join(testDir, 'dir2/file3.txt'), 'utf8')).to.equal('content3');
+            expect(realFs.readFileSync(path.join(testDir, 'dir2/subdir/file4.txt'), 'utf8')).to.equal('content4');
+            expect(realFs.readFileSync(path.join(testDir, 'root.txt'), 'utf8')).to.equal('root content');
+        });
+
+        it('should create target directory if it does not exist', () => {
+            fs.createFile('test.txt', 'test content');
+
+            // Clone to non-existent directory
+            fs.clone(testDir);
+
+            expect(realFs.existsSync(testDir)).to.be.true;
+            expect(realFs.existsSync(path.join(testDir, 'test.txt'))).to.be.true;
+            expect(realFs.readFileSync(path.join(testDir, 'test.txt'), 'utf8')).to.equal('test content');
+        });
+
+        it('should handle empty file system', () => {
+            // Clone empty file system
+            fs.clone(testDir);
+
+            // Directory should be created but empty
+            expect(realFs.existsSync(testDir)).to.be.true;
+            const contents = realFs.readdirSync(testDir);
+            expect(contents.length).to.equal(0);
+        });
+
+        it('should throw error when target path is not provided', () => {
+            expect(() => fs.clone()).to.throw('Target path is required');
+        });
+    });
+
+    describe('Seed Operations', () => {
+        let testDir;
+
+        beforeEach(() => {
+            // Create a unique temporary directory for each test
+            testDir = path.join(os.tmpdir(), `memfs-seed-test-${Date.now()}`);
+            realFs.mkdirSync(testDir, { recursive: true });
+        });
+
+        afterEach(() => {
+            // Clean up the test directory
+            if (realFs.existsSync(testDir)) {
+                realFs.rmSync(testDir, { recursive: true, force: true });
+            }
+        });
+
+        it('should seed from a directory', () => {
+            // Create a real filesystem structure to seed from
+            realFs.mkdirSync(path.join(testDir, 'dir1'));
+            realFs.writeFileSync(path.join(testDir, 'dir1/file1.txt'), 'content1', 'utf8');
+            realFs.writeFileSync(path.join(testDir, 'dir1/file2.txt'), 'content2', 'utf8');
+
+            realFs.mkdirSync(path.join(testDir, 'dir2/subdir'), { recursive: true });
+            realFs.writeFileSync(path.join(testDir, 'dir2/file3.txt'), 'content3', 'utf8');
+            realFs.writeFileSync(path.join(testDir, 'dir2/subdir/file4.txt'), 'content4', 'utf8');
+
+            realFs.writeFileSync(path.join(testDir, 'root.txt'), 'root content', 'utf8');
+
+            // Seed the in-memory filesystem
+            fs.seed(testDir);
+
+            // Verify all files and directories were imported
+            expect(fs.resolvePath('/dir1')).to.not.be.null;
+            expect(fs.resolvePath('/dir1/file1.txt')).to.not.be.null;
+            expect(fs.resolvePath('/dir1/file2.txt')).to.not.be.null;
+            expect(fs.resolvePath('/dir2')).to.not.be.null;
+            expect(fs.resolvePath('/dir2/subdir')).to.not.be.null;
+            expect(fs.resolvePath('/dir2/file3.txt')).to.not.be.null;
+            expect(fs.resolvePath('/dir2/subdir/file4.txt')).to.not.be.null;
+            expect(fs.resolvePath('/root.txt')).to.not.be.null;
+
+            // Verify file contents
+            expect(fs.resolvePath('/dir1/file1.txt').read()).to.equal('content1');
+            expect(fs.resolvePath('/dir1/file2.txt').read()).to.equal('content2');
+            expect(fs.resolvePath('/dir2/file3.txt').read()).to.equal('content3');
+            expect(fs.resolvePath('/dir2/subdir/file4.txt').read()).to.equal('content4');
+            expect(fs.resolvePath('/root.txt').read()).to.equal('root content');
+        });
+
+        it('should handle empty directory when seeding', () => {
+            // Seed from empty directory
+            fs.seed(testDir);
+
+            // File system should remain empty
+            const children = fs.root.listChildren();
+            expect(children.length).to.equal(0);
+        });
+
+        it('should throw error when source path does not exist', () => {
+            const nonExistentPath = path.join(testDir, 'nonexistent');
+            expect(() => fs.seed(nonExistentPath)).to.throw('Source does not exist');
+        });
+
+        it('should throw error when source path is not provided', () => {
+            expect(() => fs.seed()).to.throw('Source path is required');
+        });
+
+        it('should seed and then clone successfully (round-trip test)', () => {
+            // Create source directory structure
+            realFs.mkdirSync(path.join(testDir, 'source'));
+            realFs.mkdirSync(path.join(testDir, 'source/dir1'));
+            realFs.writeFileSync(path.join(testDir, 'source/dir1/file1.txt'), 'test content', 'utf8');
+            realFs.writeFileSync(path.join(testDir, 'source/root.txt'), 'root', 'utf8');
+
+            // Seed from source
+            fs.seed(path.join(testDir, 'source'));
+
+            // Clone to destination
+            const destDir = path.join(testDir, 'dest');
+            fs.clone(destDir);
+
+            // Verify destination has same structure
+            expect(realFs.existsSync(path.join(destDir, 'dir1/file1.txt'))).to.be.true;
+            expect(realFs.existsSync(path.join(destDir, 'root.txt'))).to.be.true;
+            expect(realFs.readFileSync(path.join(destDir, 'dir1/file1.txt'), 'utf8')).to.equal('test content');
+            expect(realFs.readFileSync(path.join(destDir, 'root.txt'), 'utf8')).to.equal('root');
+        });
+
+        it('should throw error for unsupported file types', () => {
+            const testFile = path.join(testDir, 'test.zip');
+            realFs.writeFileSync(testFile, 'dummy content', 'utf8');
+
+            expect(() => fs.seed(testFile)).to.throw('Unsupported file type');
         });
     });
 });

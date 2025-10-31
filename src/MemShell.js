@@ -1,5 +1,5 @@
 const { MemFS } = require('./MemFS');
-const { VM } = require('vm');
+const { JSEngine } = require('./JSEngine');
 const { parsePipeline, parseRedirections, isInlineHeredoc, parseInlineHeredoc } = require('./CommandParser');
 
 /**
@@ -9,6 +9,7 @@ class MemShell {
     constructor(memfs = null) {
         this.fs = memfs || new MemFS();
         this.stdin = null; // For piped input
+        this.jsEngine = new JSEngine(this.fs);
     }
 
     /**
@@ -444,7 +445,7 @@ class MemShell {
      * node - execute JavaScript file in the memory filesystem
      */
     node(args) {
-        const { positional } = this.parseArgs(args);
+        const { positional, flags } = this.parseArgs(args);
 
         if (positional.length === 0) {
             throw new Error('node: missing script file');
@@ -453,63 +454,12 @@ class MemShell {
         const scriptPath = positional[0];
         const scriptArgs = positional.slice(1);
 
-        const node = this.fs.resolvePath(scriptPath);
-        if (!node) {
-            throw new Error(`node: cannot find module '${scriptPath}'`);
-        }
-        if (!node.isFile()) {
-            throw new Error(`node: '${scriptPath}' is a directory`);
-        }
-
-        const code = node.read();
-
-        // Create a context with common globals
-        const output = [];
-        const context = {
-            console: {
-                log: (...args) => output.push(args.map(a => String(a)).join(' ')),
-                error: (...args) => output.push('ERROR: ' + args.map(a => String(a)).join(' ')),
-                warn: (...args) => output.push('WARN: ' + args.map(a => String(a)).join(' ')),
-            },
-            process: {
-                argv: ['node', scriptPath, ...scriptArgs],
-                cwd: () => this.fs.getCurrentDirectory(),
-                env: {},
-            },
-            require: (moduleName) => {
-                // Try to resolve module from memory filesystem
-                const modulePath = moduleName.startsWith('./') || moduleName.startsWith('../')
-                    ? moduleName
-                    : `./${moduleName}`;
-                const moduleNode = this.fs.resolvePath(modulePath);
-
-                if (moduleNode && moduleNode.isFile()) {
-                    const moduleCode = moduleNode.read();
-                    const module = { exports: {} };
-                    const moduleFunc = new Function('module', 'exports', 'require', moduleCode);
-                    moduleFunc(module, module.exports, context.require);
-                    return module.exports;
-                }
-
-                // Fall back to real Node.js require for built-in modules
-                try {
-                    return require(moduleName);
-                } catch (err) {
-                    throw new Error(`Cannot find module '${moduleName}'`);
-                }
-            },
-            __dirname: this.fs.getCurrentDirectory(),
-            __filename: scriptPath,
-            module: { exports: {} },
-            exports: {},
-        };
-
         try {
-            // Execute the script in the context
-            const scriptFunc = new Function(...Object.keys(context), code);
-            scriptFunc(...Object.values(context));
-
-            return output.join('\n');
+            const result = this.jsEngine.runScript(scriptPath, {
+                positionalArgs: scriptArgs,
+                flagArgs: flags,
+            });
+            return result.output;
         } catch (err) {
             throw new Error(`node: execution error: ${err.message}`);
         }
