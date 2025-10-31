@@ -23,6 +23,14 @@ An interactive shell with POSIX-like commands:
 ### Interactive Shell (MemREPL)
 A full-featured REPL interface for interactive file system manipulation.
 
+### LLM Tool Interface (MemTools)
+Integration with Large Language Models (LLMs) via function calling:
+- **Single Tool API**: Execute any shell command through a simple tool interface
+- **Multi-format Support**: OpenAI, Anthropic, MCP (Model Context Protocol)
+- **Stateful Context**: Maintain file system state across multiple LLM interactions
+- **State Export/Import**: Persist and restore file system state
+- **Real-world Use Cases**: Code generation, log analysis, project scaffolding
+
 ## Installation
 
 ```bash
@@ -471,6 +479,360 @@ $ cat data.csv | grep -v "error" > valid.csv
 $ export errors.csv /path/to/errors.csv
 ```
 
+## LLM Tool Integration
+
+### Overview
+
+MemTools provides a simple, powerful interface for integrating the in-memory file system with Large Language Models (LLMs). Instead of exposing dozens of individual tool functions, MemTools provides a **single tool** that accepts shell commands, giving LLMs the full power of the POSIX-like shell.
+
+### Why Use MemTools?
+
+- **Simplicity**: One tool instead of dozens
+- **Flexibility**: LLMs can use any command combination (pipes, HEREDOC, redirection)
+- **Statefulness**: File system persists across multiple tool calls
+- **Multiline Support**: Full HEREDOC support for creating complex files
+- **No Hallucination**: LLMs work with a real file system, not imagined files
+
+### Quick Start
+
+```javascript
+const { MemTools } = require('@autox/utileejs');
+
+// Create tools instance
+const memtools = new MemTools();
+
+// Execute commands
+memtools.exec('mkdir project');
+memtools.exec('cd project');
+memtools.exec(`cat > hello.js << EOF
+console.log('Hello from LLM!');
+EOF`);
+memtools.exec('node hello.js'); // Output: Hello from LLM!
+
+// Get tool definition for your LLM API
+const openaiTool = memtools.getOpenAIToolDefinition();
+const anthropicTool = memtools.getAnthropicToolDefinition();
+const mcpTool = memtools.getMCPToolDefinition();
+```
+
+### OpenAI Integration
+
+```javascript
+const { MemTools } = require('@autox/utileejs');
+const OpenAI = require('openai');
+
+const memtools = new MemTools();
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const response = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+        {
+            role: 'system',
+            content: 'You are a helpful assistant with access to an in-memory file system.'
+        },
+        {
+            role: 'user',
+            content: 'Create a package.json for a new Node.js project called "my-app"'
+        }
+    ],
+    tools: [memtools.getOpenAIToolDefinition()],
+    tool_choice: 'auto'
+});
+
+// Handle tool call
+const toolCall = response.choices[0].message.tool_calls[0];
+const args = JSON.parse(toolCall.function.arguments);
+const result = memtools.exec(args.command);
+
+console.log('Tool result:', result);
+```
+
+### Anthropic Claude Integration
+
+```javascript
+const { MemTools } = require('@autox/utileejs');
+const Anthropic = require('@anthropic-ai/sdk');
+
+const memtools = new MemTools();
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const response = await anthropic.messages.create({
+    model: 'claude-3-5-sonnet-20241022',
+    max_tokens: 1024,
+    system: 'You have access to an in-memory file system via the memfs_exec tool.',
+    messages: [
+        {
+            role: 'user',
+            content: 'Create a simple Express.js server file'
+        }
+    ],
+    tools: [memtools.getAnthropicToolDefinition()]
+});
+
+// Handle tool use
+const toolUse = response.content.find(c => c.type === 'tool_use');
+const result = memtools.exec(toolUse.input.command);
+
+console.log('Tool result:', result);
+```
+
+### MCP Server (Claude Desktop Integration)
+
+Create an MCP server for Claude Desktop:
+
+```javascript
+// mcp-server.js
+const { MemTools } = require('@autox/utileejs');
+const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+
+const memtools = new MemTools();
+const server = new Server(
+    { name: 'memfs-server', version: '1.0.0' },
+    { capabilities: { tools: {} } }
+);
+
+server.setRequestHandler('tools/list', async () => ({
+    tools: [memtools.getMCPToolDefinition()]
+}));
+
+server.setRequestHandler('tools/call', async (request) => {
+    if (request.params.name === 'memfs_exec') {
+        try {
+            const output = memtools.exec(request.params.arguments.command);
+            return {
+                content: [{ type: 'text', text: output || '(success)' }]
+            };
+        } catch (error) {
+            return {
+                content: [{ type: 'text', text: `Error: ${error.message}` }],
+                isError: true
+            };
+        }
+    }
+});
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
+```
+
+Configure Claude Desktop (`~/.config/claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "memfs": {
+      "command": "node",
+      "args": ["/path/to/mcp-server.js"]
+    }
+  }
+}
+```
+
+### MemTools API
+
+#### Constructor
+
+```javascript
+const memtools = new MemTools(fs?)
+```
+
+Create a new MemTools instance, optionally with an existing MemFS instance.
+
+#### exec(command)
+
+```javascript
+const output = memtools.exec(command: string): string
+```
+
+Execute a shell command. Supports all MemShell features including pipes, HEREDOC, and output redirection.
+
+**Examples:**
+```javascript
+// Basic commands
+memtools.exec('ls -l')
+memtools.exec('mkdir -p src/components')
+memtools.exec('echo "Hello" > file.txt')
+
+// HEREDOC (multiline)
+memtools.exec(`cat > config.yml << EOF
+server:
+  port: 8080
+database:
+  host: localhost
+EOF`)
+
+// Pipes and processing
+memtools.exec('cat log.txt | grep ERROR > errors.txt')
+
+// JavaScript execution
+memtools.exec(`cat > script.js << EOF
+console.log('Test');
+EOF`)
+memtools.exec('node script.js')
+```
+
+#### Tool Definitions
+
+Get tool definitions for different LLM platforms:
+
+```javascript
+memtools.getOpenAIToolDefinition()      // OpenAI function calling
+memtools.getAnthropicToolDefinition()   // Anthropic Claude tools
+memtools.getMCPToolDefinition()         // Model Context Protocol
+memtools.getToolDefinition()            // Generic JSON Schema
+```
+
+#### handleToolCall(toolCall)
+
+```javascript
+const result = memtools.handleToolCall(toolCall: Object): string
+```
+
+Generic handler that works with different tool call formats:
+
+```javascript
+// OpenAI format
+memtools.handleToolCall({ arguments: { command: 'ls' } })
+
+// Anthropic format
+memtools.handleToolCall({ input: { command: 'ls' } })
+
+// Direct format
+memtools.handleToolCall({ command: 'ls' })
+```
+
+#### State Management
+
+```javascript
+// Get current directory
+const cwd = memtools.getCwd()
+
+// Reset file system
+memtools.reset()
+
+// Export state (for persistence)
+const state = memtools.exportState()
+// state = { cwd: '/project', root: {...} }
+
+// Import state (restore from JSON)
+memtools.importState(state)
+
+// Get underlying MemFS instance
+const fs = memtools.getFileSystem()
+```
+
+### Real-World Use Cases
+
+#### 1. Code Generation
+
+LLM generates complete project structure:
+
+```javascript
+const memtools = new MemTools();
+
+// LLM creates project structure
+memtools.exec('mkdir -p src tests docs');
+
+memtools.exec(`cat > package.json << EOF
+{
+  "name": "my-project",
+  "version": "1.0.0",
+  "main": "src/index.js"
+}
+EOF`);
+
+memtools.exec(`cat > src/index.js << EOF
+const express = require('express');
+const app = express();
+
+app.get('/', (req, res) => {
+  res.json({ message: 'Hello World' });
+});
+
+app.listen(3000);
+EOF`);
+
+// Export project to real filesystem
+memtools.exec('export . /path/to/real/project');
+```
+
+#### 2. Log Analysis
+
+LLM analyzes and processes server logs:
+
+```javascript
+// Import real log file
+memtools.exec('import /var/log/server.log');
+
+// LLM filters errors
+memtools.exec('cat server.log | grep ERROR > errors.txt');
+
+// LLM counts by error type
+memtools.exec('cat errors.txt | sed "s/.*ERROR: //" | sed "s/ -.*//" > error-types.txt');
+
+// LLM generates report
+const errors = memtools.exec('cat error-types.txt');
+// LLM can now analyze error patterns
+```
+
+#### 3. Data Transformation
+
+LLM processes and transforms data:
+
+```javascript
+// Import CSV data
+memtools.exec('import data.csv');
+
+// LLM filters and transforms
+memtools.exec('cat data.csv | grep "2024" | sed "s/,/\\t/g" > 2024-data.tsv');
+
+// LLM generates summary
+memtools.exec('cat 2024-data.tsv | sed "s/\\t.*//" > dates.txt');
+```
+
+#### 4. Persistent Sessions
+
+Maintain context across multiple LLM conversations:
+
+```javascript
+// Conversation 1
+const memtools = new MemTools();
+memtools.exec('mkdir project');
+memtools.exec('cd project');
+const state1 = memtools.exportState();
+
+// Save state to database/storage...
+
+// Conversation 2 (later)
+const memtools2 = new MemTools();
+memtools2.importState(state1);
+// File system state restored, LLM can continue where it left off
+memtools2.exec('ls'); // Shows files from previous conversation
+```
+
+### Examples
+
+See complete working examples:
+
+- **OpenAI Integration**: `examples/llm-tool-openai.js`
+- **Anthropic Integration**: `examples/llm-tool-anthropic.js`
+- **MCP Server**: `examples/mcp-server.js`
+
+Run examples:
+
+```bash
+# OpenAI example
+node examples/llm-tool-openai.js
+
+# Anthropic example
+node examples/llm-tool-anthropic.js
+
+# MCP server demo
+node examples/mcp-server.js --demo
+```
+
 ## API Reference
 
 ### MemFS
@@ -629,12 +991,15 @@ memsh script.sh
 
 ## Use Cases
 
-1. **Testing**: Create isolated file system environments for tests
-2. **Prototyping**: Quickly experiment with file operations
-3. **Sandboxing**: Run code in isolated environment
-4. **Education**: Learn shell commands safely
-5. **Data Processing**: Manipulate files without touching real filesystem
-6. **Build Tools**: Create temporary file structures for build processes
+1. **LLM Integration**: Give AI assistants file system capabilities via function calling
+2. **Testing**: Create isolated file system environments for tests
+3. **Prototyping**: Quickly experiment with file operations
+4. **Sandboxing**: Run code in isolated environment
+5. **Education**: Learn shell commands safely
+6. **Data Processing**: Manipulate files without touching real filesystem
+7. **Build Tools**: Create temporary file structures for build processes
+8. **Code Generation**: Let LLMs generate and execute code in safe environment
+9. **Agent Systems**: Provide file system access to autonomous agents
 
 ## License
 
