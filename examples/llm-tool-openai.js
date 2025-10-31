@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Example: Using MemTools with OpenAI Function Calling
+ * Example: Using MemTools with OpenAI Responses API (Function Calling)
  *
  * This example demonstrates how to use MemTools as an OpenAI function/tool
  * to give the LLM access to an in-memory file system.
@@ -11,89 +11,86 @@
  */
 
 const { MemTools } = require('../src/MemTools');
-
-// Mock OpenAI client for demonstration
-// Replace with: const OpenAI = require('openai');
-const mockOpenAI = {
-    chat: {
-        completions: {
-            create: async (params) => {
-                console.log('=== Mock OpenAI API Call ===');
-                console.log('Messages:', JSON.stringify(params.messages, null, 2));
-                console.log('Tools:', JSON.stringify(params.tools, null, 2));
-
-                // Simulate LLM deciding to use the tool
-                return {
-                    choices: [{
-                        message: {
-                            role: 'assistant',
-                            content: null,
-                            tool_calls: [{
-                                id: 'call_123',
-                                type: 'function',
-                                function: {
-                                    name: 'memfs_exec',
-                                    arguments: JSON.stringify({
-                                        command: 'cat > hello.js << EOF\nconsole.log("Hello from LLM!");\nEOF'
-                                    })
-                                }
-                            }]
-                        }
-                    }]
-                };
-            }
-        }
-    }
-};
+const OpenAILib = require('openai');
 
 async function main() {
     // Initialize MemTools
     const memtools = new MemTools();
 
-    // Get tool definition for OpenAI
-    const tool = memtools.getOpenAIToolDefinition();
+    // Get tool definition for OpenAI and adapt to Responses API expected shape
+    const legacyTool = memtools.getOpenAIToolDefinition();
+    const tool = {
+        type: 'function',
+        name: legacyTool.function.name,
+        description: legacyTool.function.description,
+        parameters: legacyTool.function.parameters,
+    };
 
     console.log('=== OpenAI Tool Definition ===');
     console.log(JSON.stringify(tool, null, 2));
     console.log('');
 
-    // Create OpenAI client
-    // const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const openai = mockOpenAI; // Using mock for demo
+    // Create OpenAI client (requires OPENAI_API_KEY in environment)
+    const OpenAI = OpenAILib.OpenAI || OpenAILib;
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     // Initial conversation
-    const messages = [
-        {
-            role: 'system',
-            content: 'You are a helpful assistant with access to an in-memory file system. Use the memfs_exec tool to create, read, and manipulate files.'
-        },
-        {
-            role: 'user',
-            content: 'Create a JavaScript file called hello.js that prints "Hello from LLM!" and then execute it.'
-        }
-    ];
+    const instructions = 'You are a helpful assistant with access to an in-memory file system. Use the memfs_exec tool to create, read, and manipulate files.';
+    const userPrompt = 'Create a JavaScript file called hello.js that prints "Hello from LLM!" and then execute it.';
 
     console.log('=== Step 1: LLM decides to create file ===');
-    const response1 = await openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: messages,
-        tools: [tool],
-        tool_choice: 'auto'
+    const response1 = await openai.responses.create({
+        model: 'gpt-4o',
+        instructions,
+        input: userPrompt,
+        tools: [tool]
     });
 
-    const toolCall = response1.choices[0].message.tool_calls[0];
-    console.log('\nLLM wants to call:', toolCall.function.name);
-    console.log('With arguments:', toolCall.function.arguments);
+    // Extract the tool/function call from the Responses API output
+    const functionCallItem = (response1.output || []).find(item => item.type === 'function_call');
+    if (!functionCallItem) {
+        console.log('No tool call returned by the model. Full response:');
+        console.log(JSON.stringify(response1, null, 2));
+        return;
+    }
+
+    console.log('\nLLM wants to call:', functionCallItem.name);
+    console.log('With arguments:', functionCallItem.arguments);
 
     // Execute the tool call
-    const args = JSON.parse(toolCall.function.arguments);
+    const args = JSON.parse(functionCallItem.arguments || '{}');
     const result1 = memtools.exec(args.command);
 
     console.log('\n=== Tool Execution Result ===');
     console.log('Command:', args.command);
     console.log('Output:', result1 || '(success - no output)');
 
-    // Second tool call: execute the file
+    // Submit the tool output back to the Responses API to let the model continue
+    const followUpMessages = [
+        functionCallItem,
+        {
+            type: 'function_call_output',
+            call_id: functionCallItem.call_id,
+            output: result1 || '(success - no output)'
+        }
+    ];
+
+    const response2 = await openai.responses.create({
+        model: 'gpt-4o',
+        tools: [tool],
+        previous_response_id: response1.id,
+        input: followUpMessages
+    });
+
+    console.log('\n=== Assistant Follow-up (after tool output) ===');
+    // Some SDKs expose a convenience field; otherwise print the structured output
+    if (response2.output_text) {
+        console.log(response2.output_text);
+    } else {
+        console.log(JSON.stringify(response2.output, null, 2));
+    }
+
+    // Second local step: execute the created file (outside LLM, for demo)
     console.log('\n=== Step 2: Execute the created file ===');
     const result2 = memtools.exec('node hello.js');
     console.log('Command: node hello.js');
@@ -108,7 +105,7 @@ async function main() {
     const content = memtools.exec('cat hello.js');
     console.log(content);
 
-    // Example: Complex multi-step task
+    // Example: Complex multi-step File Processing
     console.log('\n=== Example: Multi-step File Processing ===');
 
     // Create data file

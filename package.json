@@ -16,7 +16,8 @@
     "author": "Joohwi Lee <telnet2@gmail.com>",
     "license": "EPL-2.0",
     "dependencies": {
-        "eventemitter3": "^3.1.0"
+        "eventemitter3": "^3.1.0",
+        "openai": "^6.7.0"
     },
     "devDependencies": {
         "babel-cli": "^6.26.0",
