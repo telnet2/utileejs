@@ -3,9 +3,14 @@
     "version": "0.0.7",
     "description": "Useful JS utilities",
     "main": "index.js",
+    "bin": {
+        "memfs": "./bin/memfs-repl.js"
+    },
     "files": [
         "index.js",
-        "lib"
+        "lib",
+        "src",
+        "bin"
     ],
     "repository": "git@github.com:telnet2/utileejs.git",
     "author": "Joohwi Lee <telnet2@gmail.com>",
