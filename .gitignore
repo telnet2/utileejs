@@ -6,7 +6,10 @@ yarn-debug.log*
 yarn-error.log*
 .history
 
+# Compiled output
 lib/
+dist/
+dist-*/
 
 # Runtime data
 pids
@@ -62,3 +65,13 @@ typings/
 
 # next.js build output
 .next
+
+# Backup files
+*.backup
+*~
+*.bak
+
+# Temporary files and directories
+*.tmp
+.DS_Store
+memfs-*/
