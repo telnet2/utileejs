@@ -80,11 +80,7 @@ export class JSEngine {
 
         const vm = new NodeVM(vmConfig);
         const customRequire = this.createRequireForModule(vm, scriptDir, this.fsAdapter, this.moduleCache);
-        const moduleExports = vm.run(scriptNode.read(), {
-            filename: scriptFullPath,
-            dirname: scriptDir,
-            require: customRequire,
-        });
+        const moduleExports = vm.run(scriptNode.read(), scriptFullPath);
 
         return {
             output: consoleBuffer.join('\n'),
@@ -144,11 +140,7 @@ export class JSEngine {
 
             const moduleDir = this.dirname(modulePath);
             const moduleRequire = this.createRequireForModule(vm, moduleDir, fsAdapter, moduleCache);
-            const moduleExports = vm.run(node.read(), {
-                filename: modulePath,
-                dirname: moduleDir,
-                require: moduleRequire,
-            });
+            const moduleExports = vm.run(node.read(), modulePath);
 
             moduleCache.set(modulePath, moduleExports);
             return moduleExports;

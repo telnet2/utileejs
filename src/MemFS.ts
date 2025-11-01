@@ -447,7 +447,7 @@ export class MemFS {
         tar.t({
             file: tarPath,
             sync: true,
-            onentry: (entry) => {
+            onentry: (entry: import('tar').ReadEntry) => {
                 entries.push({
                     path: entry.path,
                     type: entry.type,
@@ -460,15 +460,15 @@ export class MemFS {
             file: tarPath,
             sync: true,
             cwd: '/tmp',
-            onentry: (entry) => {
-                if (entry.type === 'File') {
-                    const chunks: Buffer[] = [];
-                    entry.on('data', (chunk: Buffer) => chunks.push(chunk));
-                    entry.on('end', () => {
-                        fileContents.set(entry.path, Buffer.concat(chunks).toString('utf8'));
-                    });
-                }
-            },
+            onentry: (entry: import('tar').ReadEntry) => {
+                 if (entry.type === 'File') {
+                     const chunks: Buffer[] = [];
+                     entry.on('data', (chunk: Buffer) => chunks.push(chunk));
+                     entry.on('end', () => {
+                         fileContents.set(entry.path, Buffer.concat(chunks).toString('utf8'));
+                     });
+                 }
+             },
         });
 
         for (const entry of entries) {

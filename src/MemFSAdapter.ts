@@ -372,21 +372,21 @@ export class MemFSAdapter {
 
     private buildPromiseAPI(): Record<string, (...args: unknown[]) => Promise<unknown>> {
         return {
-            readFile: (...args) => this.promiseWrap(this.readFile.bind(this), args),
-            writeFile: (...args) => this.promiseWrap(this.writeFile.bind(this), args),
-            appendFile: (...args) => this.promiseWrap(this.appendFile.bind(this), args),
-            mkdir: (...args) => this.promiseWrap(this.mkdir.bind(this), args),
-            readdir: (...args) => this.promiseWrap(this.readdir.bind(this), args),
-            stat: (...args) => this.promiseWrap(this.stat.bind(this), args),
-            lstat: (...args) => this.promiseWrap(this.lstat.bind(this), args),
-            unlink: (...args) => this.promiseWrap(this.unlink.bind(this), args),
-            rmdir: (...args) => this.promiseWrap(this.rmdir.bind(this), args),
-            rename: (...args) => this.promiseWrap(this.rename.bind(this), args),
+            readFile: (...args) => this.promiseWrap(this.readFile.bind(this) as any, args),
+            writeFile: (...args) => this.promiseWrap(this.writeFile.bind(this) as any, args),
+            appendFile: (...args) => this.promiseWrap(this.appendFile.bind(this) as any, args),
+            mkdir: (...args) => this.promiseWrap(this.mkdir.bind(this) as any, args),
+            readdir: (...args) => this.promiseWrap(this.readdir.bind(this) as any, args),
+            stat: (...args) => this.promiseWrap(this.stat.bind(this) as any, args),
+            lstat: (...args) => this.promiseWrap(this.lstat.bind(this) as any, args),
+            unlink: (...args) => this.promiseWrap(this.unlink.bind(this) as any, args),
+            rmdir: (...args) => this.promiseWrap(this.rmdir.bind(this) as any, args),
+            rename: (...args) => this.promiseWrap(this.rename.bind(this) as any, args),
         };
     }
 
     private promiseWrap(
-        fn: (...fnArgs: unknown[]) => void,
+        fn: any,
         args: unknown[],
     ): Promise<unknown> {
         return new Promise((resolve, reject) => {
