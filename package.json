@@ -16,19 +16,29 @@
     "author": "Joohwi Lee <telnet2@gmail.com>",
     "license": "EPL-2.0",
     "dependencies": {
+        "argparse": "^2.0.1",
+        "diff": "^8.0.2",
         "eventemitter3": "^3.1.0",
-        "openai": "^6.7.0"
+        "micromatch": "^4.0.8",
+        "openai": "^6.7.0",
+        "sh-syntax": "^0.5.8",
+        "vm2": "^3.9.20"
     },
     "devDependencies": {
+        "@types/argparse": "^2.0.17",
+        "@types/diff": "^7.0.2",
+        "@types/micromatch": "^4.0.10",
+        "@types/node": "^20.16.6",
         "babel-cli": "^6.26.0",
         "babel-preset-env": "^1.7.0",
         "chai": "^4.1.2",
         "mocha": "^5.2.0",
         "mocha-logger": "^1.0.6",
-        "typescript": "^3.0.1"
+        "ts-node": "^10.9.2",
+        "typescript": "^5.9.3"
     },
     "scripts": {
-        "build": "npx babel src -d lib --minified",
-        "test": "npx mocha test/*.test.js"
+        "build": "tsc -p tsconfig.json",
+        "test": "npm run build && npx mocha test/*.test.js"
     }
 }

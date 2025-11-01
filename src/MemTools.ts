@@ -1,5 +1,116 @@
-const { MemShell } = require('./MemShell');
-const { MemFS } = require('./MemFS');
+import { MemShell } from './MemShell';
+import { MemFS, MemNode, MemFile, MemDirectory } from './MemFS';
+
+/**
+ * OpenAI tool definition
+ */
+export interface OpenAIToolDefinition {
+    type: string;
+    function: {
+        name: string;
+        description: string;
+        parameters: {
+            type: string;
+            properties: {
+                [key: string]: {
+                    type: string;
+                    description: string;
+                };
+            };
+            required: string[];
+        };
+    };
+}
+
+/**
+ * Anthropic tool definition
+ */
+export interface AnthropicToolDefinition {
+    name: string;
+    description: string;
+    input_schema: {
+        type: string;
+        properties: {
+            [key: string]: {
+                type: string;
+                description: string;
+            };
+        };
+        required: string[];
+    };
+}
+
+/**
+ * MCP (Model Context Protocol) tool definition
+ */
+export interface MCPToolDefinition {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: {
+            [key: string]: {
+                type: string;
+                description: string;
+            };
+        };
+        required: string[];
+    };
+}
+
+/**
+ * Generic tool definition
+ */
+export interface ToolDefinition {
+    name: string;
+    description: string;
+    parameters: {
+        type: string;
+        properties: {
+            [key: string]: {
+                type: string;
+                description: string;
+            };
+        };
+        required: string[];
+    };
+}
+
+/**
+ * Tool call from LLM
+ */
+export interface ToolCall {
+    command?: string;
+    parameters?: {
+        command?: string;
+    };
+    input?: {
+        command?: string;
+    };
+    arguments?: {
+        command?: string;
+    };
+}
+
+/**
+ * Serialized node structure
+ */
+interface SerializedNode {
+    type: 'file' | 'directory';
+    name: string;
+    content?: string;
+    children?: SerializedNode[];
+    createdAt: Date;
+    modifiedAt: Date;
+}
+
+/**
+ * File system state
+ */
+export interface FileSystemState {
+    cwd: string;
+    root: SerializedNode;
+}
 
 /**
  * MemTools - LLM Tool Interface for In-Memory File System
@@ -12,12 +123,15 @@ const { MemFS } = require('./MemFS');
  * 2. Get tool definition: tools.getToolDefinition()
  * 3. Execute commands: tools.exec(command)
  */
-class MemTools {
+export class MemTools {
+    private shell: MemShell;
+    public fs: MemFS;
+
     /**
      * Create a new MemTools instance
-     * @param {MemFS} [fs] - Optional existing MemFS instance
+     * @param fs - Optional existing MemFS instance
      */
-    constructor(fs) {
+    constructor(fs?: MemFS) {
         this.shell = new MemShell(fs);
         this.fs = this.shell.fs;
     }
@@ -34,23 +148,23 @@ class MemTools {
      * - JavaScript execution: node script.js
      * - Import/Export: import /path/file.txt, export file.txt /path/output.txt
      *
-     * @param {string} command - Shell command to execute (can be multiline)
-     * @returns {string} Command output
-     * @throws {Error} If command fails
+     * @param command - Shell command to execute (can be multiline)
+     * @returns Command output
+     * @throws Error if command fails
      */
-    exec(command) {
+    exec(command: string): string {
         try {
             return this.shell.exec(command);
-        } catch (error) {
+        } catch (error: any) {
             throw new Error(`Command failed: ${error.message}`);
         }
     }
 
     /**
      * Get OpenAI-compatible tool definition
-     * @returns {Object} OpenAI function calling schema
+     * @returns OpenAI function calling schema
      */
-    getOpenAIToolDefinition() {
+    getOpenAIToolDefinition(): OpenAIToolDefinition {
         return {
             type: "function",
             function: {
@@ -72,9 +186,9 @@ class MemTools {
 
     /**
      * Get Anthropic-compatible tool definition
-     * @returns {Object} Anthropic tool schema
+     * @returns Anthropic tool schema
      */
-    getAnthropicToolDefinition() {
+    getAnthropicToolDefinition(): AnthropicToolDefinition {
         return {
             name: "memfs_exec",
             description: "Execute shell commands in an in-memory file system. Supports all POSIX-like commands including ls, cat, grep, pipes, HEREDOC, and output redirection. State persists across calls, allowing you to create files, directories, and execute JavaScript in the memory filesystem.",
@@ -93,9 +207,9 @@ class MemTools {
 
     /**
      * Get MCP (Model Context Protocol) compatible tool definition
-     * @returns {Object} MCP tool schema
+     * @returns MCP tool schema
      */
-    getMCPToolDefinition() {
+    getMCPToolDefinition(): MCPToolDefinition {
         return {
             name: "memfs_exec",
             description: "Execute shell commands in an in-memory file system with full POSIX-like command support",
@@ -114,9 +228,9 @@ class MemTools {
 
     /**
      * Get generic JSON Schema tool definition
-     * @returns {Object} JSON Schema compatible definition
+     * @returns JSON Schema compatible definition
      */
-    getToolDefinition() {
+    getToolDefinition(): ToolDefinition {
         return {
             name: "memfs_exec",
             description: "Execute shell commands in an in-memory file system. Supports POSIX-like commands, pipes, HEREDOC, and output redirection. State persists across calls.",
@@ -135,10 +249,10 @@ class MemTools {
 
     /**
      * Handle tool call from LLM
-     * @param {Object} toolCall - Tool call object from LLM
-     * @returns {string} Command output
+     * @param toolCall - Tool call object from LLM
+     * @returns Command output
      */
-    handleToolCall(toolCall) {
+    handleToolCall(toolCall: ToolCall): string {
         // Support various tool call formats
         const command = toolCall.command ||
                        toolCall.parameters?.command ||
@@ -154,34 +268,34 @@ class MemTools {
 
     /**
      * Get current working directory
-     * @returns {string} Current directory path
+     * @returns Current directory path
      */
-    getCwd() {
+    getCwd(): string {
         return this.fs.getCurrentDirectory();
     }
 
     /**
      * Reset file system to empty state
      */
-    reset() {
+    reset(): void {
         this.fs = new MemFS();
         this.shell = new MemShell(this.fs);
     }
 
     /**
      * Get file system instance (for advanced usage)
-     * @returns {MemFS} The underlying MemFS instance
+     * @returns The underlying MemFS instance
      */
-    getFileSystem() {
+    getFileSystem(): MemFS {
         return this.fs;
     }
 
     /**
      * Export entire file system state as JSON
-     * @returns {Object} Serializable file system state
+     * @returns Serializable file system state
      */
-    exportState() {
-        const serializeNode = (node) => {
+    exportState(): FileSystemState {
+        const serializeNode = (node: MemNode): SerializedNode => {
             if (node.isFile()) {
                 return {
                     type: 'file',
@@ -190,11 +304,20 @@ class MemTools {
                     createdAt: node.createdAt,
                     modifiedAt: node.modifiedAt
                 };
-            } else {
+            } else if (node.isDirectory()) {
                 return {
                     type: 'directory',
                     name: node.name,
                     children: Array.from(node.children.values()).map(serializeNode),
+                    createdAt: node.createdAt,
+                    modifiedAt: node.modifiedAt
+                };
+            } else {
+                // Fallback case (should never happen)
+                return {
+                    type: 'directory',
+                    name: node.name,
+                    children: [],
                     createdAt: node.createdAt,
                     modifiedAt: node.modifiedAt
                 };
@@ -209,15 +332,15 @@ class MemTools {
 
     /**
      * Import file system state from JSON
-     * @param {Object} state - File system state from exportState()
+     * @param state - File system state from exportState()
      */
-    importState(state) {
+    importState(state: FileSystemState): void {
         this.reset();
 
-        const deserializeNode = (nodeData, parent) => {
+        const deserializeNode = (nodeData: SerializedNode, parent: string | null): void => {
             if (nodeData.type === 'file') {
                 const path = parent ? `${parent}/${nodeData.name}` : nodeData.name;
-                this.fs.createFile(path, nodeData.content);
+                this.fs.createFile(path, nodeData.content || '');
             } else if (nodeData.type === 'directory' && nodeData.name !== '') {
                 const path = parent ? `${parent}/${nodeData.name}` : nodeData.name;
                 this.fs.createDirectory(path);
@@ -242,5 +365,3 @@ class MemTools {
         }
     }
 }
-
-module.exports = { MemTools };

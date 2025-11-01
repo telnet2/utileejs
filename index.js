@@ -1,11 +1,13 @@
-const EventRouter = require('./src/EventRouter');
-const { MemFS, MemFile, MemDirectory, MemNode } = require('./src/MemFS');
-const { MemShell } = require('./src/MemShell');
-const { MemREPL } = require('./src/MemREPL');
-const { MemTools } = require('./src/MemTools');
+const { EventRouter } = require('./lib/EventRouter');
+const { MemFS, MemFile, MemDirectory, MemNode } = require('./lib/MemFS');
+const { MemShell } = require('./lib/MemShell');
+const { MemREPL } = require('./lib/MemREPL');
+const { MemTools } = require('./lib/MemTools');
+const { JSEngine } = require('./lib/JSEngine');
+const { MemFSAdapter } = require('./lib/MemFSAdapter');
 
 module.exports = {
-    EventRouter: EventRouter,
+    EventRouter,
     MemFS,
     MemFile,
     MemDirectory,
@@ -13,4 +15,6 @@ module.exports = {
     MemShell,
     MemREPL,
     MemTools,
+    JSEngine,
+    MemFSAdapter,
 }

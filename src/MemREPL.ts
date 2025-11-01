@@ -1,13 +1,22 @@
-const readline = require('readline');
-const { MemFS } = require('./MemFS');
-const { MemShell } = require('./MemShell');
-const { parseHeredoc } = require('./CommandParser');
+import * as readline from 'readline';
+import { MemFS } from './MemFS';
+import { MemShell } from './MemShell';
+import { parseHeredoc } from './CommandParser';
 
 /**
  * REPL (Read-Eval-Print Loop) interface for MemShell
  */
-class MemREPL {
-    constructor(memfs = null) {
+export class MemREPL {
+    public shell: MemShell;
+    private rl: readline.Interface | null;
+    private running: boolean;
+    private history: string[];
+    private heredocMode: boolean;
+    private heredocCommand: string;
+    private heredocDelimiter: string;
+    private heredocContent: string[];
+
+    constructor(memfs: MemFS | null = null) {
         this.shell = new MemShell(memfs);
         this.rl = null;
         this.running = false;
@@ -21,7 +30,7 @@ class MemREPL {
     /**
      * Get the prompt string
      */
-    getPrompt() {
+    getPrompt(): string {
         if (this.heredocMode) {
             return '> ';
         }
@@ -32,7 +41,7 @@ class MemREPL {
     /**
      * Display help information
      */
-    showHelp() {
+    showHelp(): void {
         const help = `
 MemShell - In-Memory File System Shell
 
@@ -103,7 +112,7 @@ Examples:
     /**
      * Handle a command
      */
-    handleCommand(line) {
+    handleCommand(line: string): void {
         // If in HEREDOC mode, collect content
         if (this.heredocMode) {
             const trimmed = line.trim();
@@ -120,7 +129,7 @@ Examples:
                     if (result) {
                         console.log(result);
                     }
-                } catch (err) {
+                } catch (err: any) {
                     console.error(err.message);
                 }
 
@@ -185,7 +194,7 @@ Examples:
             if (result) {
                 console.log(result);
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error(err.message);
         }
     }
@@ -193,7 +202,7 @@ Examples:
     /**
      * Start the REPL
      */
-    start() {
+    start(): void {
         this.running = true;
 
         console.log('MemShell - In-Memory File System Shell');
@@ -205,9 +214,9 @@ Examples:
             prompt: this.getPrompt(),
         });
 
-        this.rl.on('line', (line) => {
+        this.rl.on('line', (line: string) => {
             this.handleCommand(line);
-            if (this.running) {
+            if (this.running && this.rl) {
                 this.rl.setPrompt(this.getPrompt());
                 this.rl.prompt();
             }
@@ -223,7 +232,7 @@ Examples:
     /**
      * Stop the REPL
      */
-    stop() {
+    stop(): void {
         this.running = false;
         if (this.rl) {
             this.rl.close();
@@ -235,14 +244,14 @@ Examples:
     /**
      * Execute a single command (non-interactive mode)
      */
-    execCommand(commandLine) {
+    execCommand(commandLine: string): number {
         try {
             const result = this.shell.exec(commandLine);
             if (result) {
                 console.log(result);
             }
             return 0;
-        } catch (err) {
+        } catch (err: any) {
             console.error(err.message);
             return 1;
         }
@@ -251,7 +260,7 @@ Examples:
     /**
      * Execute multiple commands from a script
      */
-    execScript(commands) {
+    execScript(commands: string[]): number {
         for (const command of commands) {
             const trimmed = command.trim();
             if (trimmed && !trimmed.startsWith('#')) {
@@ -260,7 +269,7 @@ Examples:
                     if (result) {
                         console.log(result);
                     }
-                } catch (err) {
+                } catch (err: any) {
                     console.error(`Error executing '${trimmed}': ${err.message}`);
                     return 1;
                 }
@@ -269,5 +278,3 @@ Examples:
         return 0;
     }
 }
-
-module.exports = { MemREPL };

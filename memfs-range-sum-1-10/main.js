@@ -1,53 +1,39 @@
-// main.js
+// main.js: Range Summation Utility
 
-// Parse command line arguments
-const args = process.argv.slice(2);
-
-function parseRangeArgument(args) {
-  const rangeFlagIndex = args.findIndex(arg => arg === '--range');
-  if (rangeFlagIndex === -1) {
-    console.error('Error: Missing --range flag. Usage: --range M,N');
-    return null;
+function main() {
+  const args = process.argv.slice(2);
+  const rangeFlagIndex = args.indexOf('--range');
+  if (rangeFlagIndex === -1 || rangeFlagIndex === args.length - 1) {
+    console.error('Error: --range flag is required with a value.');
+    return;
   }
 
-  const rangeArg = args[rangeFlagIndex + 1];
-  if (!rangeArg) {
-    console.error('Error: Missing range values after --range. Usage: --range M,N');
-    return null;
-  }
-
-  const parts = rangeArg.split(',');
+  const rangeValue = args[rangeFlagIndex + 1];
+  const parts = rangeValue.split(',');
   if (parts.length !== 2) {
-    console.error('Error: Range must be two integers separated by a comma.');
-    return null;
+    console.error('Error: --range value must be in format M,N');
+    return;
   }
 
-  const M = parseInt(parts[0], 10);
-  const N = parseInt(parts[1], 10);
+  const M = Number(parts[0]);
+  const N = Number(parts[1]);
 
-  if (isNaN(M) || isNaN(N)) {
-    console.error('Error: Both range values must be valid integers.');
-    return null;
+  if (!Number.isInteger(M) || !Number.isInteger(N)) {
+    console.error('Error: M and N must be integers.');
+    return;
   }
 
   if (M > N) {
-    console.error('Error: M must be less than or equal to N in --range M,N');
-    return null;
+    console.error('Error: M must be less than or equal to N.');
+    return;
   }
 
-  return { M, N };
-}
-
-function main() {
-  const range = parseRangeArgument(args);
-  if (!range) return;
-
   let sum = 0;
-  for (let i = range.M; i <= range.N; i++) {
+  for (let i = M; i <= N; i++) {
     sum += i;
   }
 
-  console.log(`Sum from ${range.M} to ${range.N} is ${sum}`);
+  console.log(`Sum from ${M} to ${N} is ${sum}`);
 }
 
 main();

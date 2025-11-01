@@ -1,78 +1,80 @@
-const fs = require('fs');
-const path = require('path');
-const zlib = require('zlib');
-const { Readable } = require('stream');
+import * as fs from 'fs';
+import * as path from 'path';
 
-/**
- * In-memory File System Node (base class)
- */
-class MemNode {
-    constructor(name, parent = null) {
+export type MemNodeType = 'file' | 'directory';
+
+export abstract class MemNode {
+    public name: string;
+    public parent: MemDirectory | null;
+    public createdAt: Date;
+    public modifiedAt: Date;
+
+    protected constructor(name: string, parent: MemDirectory | null = null) {
         this.name = name;
         this.parent = parent;
         this.createdAt = new Date();
         this.modifiedAt = new Date();
     }
 
-    getPath() {
-        if (!this.parent) return '/';
+    getPath(): string {
+        if (!this.parent) {
+            return '/';
+        }
         const parentPath = this.parent.getPath();
         return parentPath === '/' ? `/${this.name}` : `${parentPath}/${this.name}`;
     }
 
-    isFile() {
+    isFile(): this is MemFile {
         return this instanceof MemFile;
     }
 
-    isDirectory() {
+    isDirectory(): this is MemDirectory {
         return this instanceof MemDirectory;
     }
 }
 
-/**
- * In-memory File
- */
-class MemFile extends MemNode {
-    constructor(name, content = '', parent = null) {
+export class MemFile extends MemNode {
+    private content: string;
+
+    constructor(name: string, content = '', parent: MemDirectory | null = null) {
         super(name, parent);
         this.content = content;
     }
 
-    write(content) {
+    write(content: string): void {
         this.content = content;
         this.modifiedAt = new Date();
     }
 
-    append(content) {
+    append(content: string): void {
         this.content += content;
         this.modifiedAt = new Date();
     }
 
-    read() {
+    read(): string {
         return this.content;
     }
 
-    size() {
+    size(): number {
         return Buffer.byteLength(this.content, 'utf8');
     }
 }
 
-/**
- * In-memory Directory
- */
-class MemDirectory extends MemNode {
-    constructor(name, parent = null) {
+export class MemDirectory extends MemNode {
+    public children: Map<string, MemNode>;
+
+    constructor(name: string, parent: MemDirectory | null = null) {
         super(name, parent);
-        this.children = new Map();
+        this.children = new Map<string, MemNode>();
     }
 
-    addChild(node) {
+    addChild(node: MemNode): void {
         this.children.set(node.name, node);
         node.parent = this;
         this.modifiedAt = new Date();
     }
 
-    removeChild(name) {
+    removeChild(name: string): boolean {
         const removed = this.children.delete(name);
         if (removed) {
             this.modifiedAt = new Date();
@@ -80,72 +82,91 @@ class MemDirectory extends MemNode {
         return removed;
     }
 
-    getChild(name) {
+    getChild(name: string): MemNode | undefined {
         return this.children.get(name);
     }
 
-    hasChild(name) {
+    hasChild(name: string): boolean {
         return this.children.has(name);
     }
 
-    listChildren() {
+    listChildren(): MemNode[] {
         return Array.from(this.children.values());
     }
 }
 
-/**
- * In-memory File System
- */
-class MemFS {
+interface ParsedPath {
+    dir: MemDirectory;
+    name: string;
+}
+
+interface TarEntry {
+    path: string;
+    type: string;
+    size: number;
+}
+
+export class MemFS {
+    public readonly root: MemDirectory;
+    private cwd: MemDirectory;
+
     constructor() {
         this.root = new MemDirectory('');
         this.cwd = this.root;
     }
 
-    /**
-     * Normalize and resolve path
-     */
-    resolvePath(pathStr) {
+    resolvePath(pathStr: string, startNode?: MemNode | null): MemNode | null {
         if (!pathStr || pathStr === '/') {
             return this.root;
         }
 
         const isAbsolute = pathStr.startsWith('/');
-        const parts = pathStr.split('/').filter(p => p && p !== '.');
-        let current = isAbsolute ? this.root : this.cwd;
+        const parts = pathStr.split('/').filter((p) => p && p !== '.');
+        let current: MemNode = isAbsolute
+            ? this.root
+            : this.#normalizeStartNode(startNode) ?? this.cwd;
 
         for (const part of parts) {
             if (part === '..') {
-                current = current.parent || current;
-            } else {
-                const child = current.getChild(part);
-                if (!child) {
-                    return null;
-                }
-                current = child;
+                current = current.parent ?? current;
+                continue;
             }
+
+            if (!current.isDirectory()) {
+                return null;
+            }
+
+            const child = current.getChild(part);
+            if (!child) {
+                return null;
+            }
+            current = child;
         }
 
         return current;
     }
 
-    /**
-     * Get parent directory and filename from path
-     */
-    parsePath(pathStr) {
+    parsePath(pathStr: string): ParsedPath | null {
         if (!pathStr || pathStr === '/') {
             return { dir: this.root, name: '' };
         }
 
         const isAbsolute = pathStr.startsWith('/');
-        const parts = pathStr.split('/').filter(p => p && p !== '.');
+        const parts = pathStr.split('/').filter((p) => p && p !== '.');
         const name = parts.pop();
 
-        let current = isAbsolute ? this.root : this.cwd;
+        if (!name) {
+            return null;
+        }
+
+        let current: MemNode = isAbsolute ? this.root : this.cwd;
         for (const part of parts) {
             if (part === '..') {
-                current = current.parent || current;
+                current = current.parent ?? current;
             } else {
+                if (!current.isDirectory()) {
+                    return null;
+                }
                 const child = current.getChild(part);
                 if (!child || !child.isDirectory()) {
                     return null;
@@ -154,13 +175,14 @@ class MemFS {
             }
         }
 
+        if (!current.isDirectory()) {
+            return null;
+        }
+
         return { dir: current, name };
     }
 
-    /**
-     * Create a file
-     */
-    createFile(pathStr, content = '') {
+    createFile(pathStr: string, content = ''): MemFile {
         const parsed = this.parsePath(pathStr);
         if (!parsed) {
             throw new Error(`Cannot create file: invalid path ${pathStr}`);
@@ -180,10 +202,7 @@ class MemFS {
         return file;
     }
 
-    /**
-     * Create a directory
-     */
-    createDirectory(pathStr) {
+    createDirectory(pathStr: string): MemDirectory {
         const parsed = this.parsePath(pathStr);
         if (!parsed) {
             throw new Error(`Cannot create directory: invalid path ${pathStr}`);
@@ -203,17 +222,14 @@ class MemFS {
         return newDir;
     }
 
-    /**
-     * Create directories recursively
-     */
-    createDirectories(pathStr) {
+    createDirectories(pathStr: string): MemDirectory {
         const isAbsolute = pathStr.startsWith('/');
-        const parts = pathStr.split('/').filter(p => p && p !== '.');
-        let current = isAbsolute ? this.root : this.cwd;
+        const parts = pathStr.split('/').filter((p) => p && p !== '.');
+        let current: MemDirectory = isAbsolute ? this.root : this.cwd;
 
         for (const part of parts) {
             if (part === '..') {
-                current = current.parent || current;
+                current = current.parent ?? current;
             } else {
                 let child = current.getChild(part);
                 if (!child) {
@@ -222,17 +238,14 @@ class MemFS {
                 } else if (!child.isDirectory()) {
                     throw new Error(`Not a directory: ${part}`);
                 }
-                current = child;
+                current = child as MemDirectory;
             }
         }
 
         return current;
     }
 
-    /**
-     * Remove a file or directory
-     */
-    remove(pathStr, recursive = false) {
+    remove(pathStr: string, recursive = false): boolean {
         const node = this.resolvePath(pathStr);
         if (!node) {
             throw new Error(`No such file or directory: ${pathStr}`);
@@ -253,10 +266,7 @@ class MemFS {
         return node.parent.removeChild(node.name);
     }
 
-    /**
-     * Change current working directory
-     */
-    changeDirectory(pathStr) {
+    changeDirectory(pathStr?: string): void {
         if (!pathStr) {
             this.cwd = this.root;
             return;
@@ -274,26 +284,17 @@ class MemFS {
         this.cwd = node;
     }
 
-    /**
-     * Get current working directory path
-     */
-    getCurrentDirectory() {
+    getCurrentDirectory(): string {
         return this.cwd.getPath();
     }
 
-    /**
-     * Import file from real filesystem
-     */
-    importFile(realPath, memPath = null) {
+    importFile(realPath: string, memPath: string | null = null): MemFile {
         const content = fs.readFileSync(realPath, 'utf8');
-        const fileName = memPath || path.basename(realPath);
+        const fileName = memPath ?? path.basename(realPath);
         return this.createFile(fileName, content);
     }
 
-    /**
-     * Export file to real filesystem
-     */
-    exportFile(memPath, realPath) {
+    exportFile(memPath: string, realPath: string): void {
         const node = this.resolvePath(memPath);
         if (!node) {
             throw new Error(`No such file: ${memPath}`);
@@ -306,16 +307,13 @@ class MemFS {
         fs.writeFileSync(realPath, node.read(), 'utf8');
     }
 
-    /**
-     * Import directory recursively from real filesystem
-     */
-    importDirectory(realPath, memPath = null) {
+    importDirectory(realPath: string, memPath: string | null = null): MemDirectory {
         const stats = fs.statSync(realPath);
         if (!stats.isDirectory()) {
             throw new Error(`Not a directory: ${realPath}`);
         }
 
-        const dirName = memPath || path.basename(realPath);
+        const dirName = memPath ?? path.basename(realPath);
         const memDir = this.createDirectory(dirName);
         const oldCwd = this.cwd;
         this.cwd = memDir;
@@ -334,10 +332,7 @@ class MemFS {
         return memDir;
     }
 
-    /**
-     * Export directory recursively to real filesystem
-     */
-    exportDirectory(memPath, realPath) {
+    exportDirectory(memPath: string, realPath: string): void {
         const node = this.resolvePath(memPath);
         if (!node) {
             throw new Error(`No such directory: ${memPath}`);
@@ -361,20 +356,15 @@ class MemFS {
         }
     }
 
-    /**
-     * Clone the entire file system to a real filesystem directory
-     */
-    clone(realPath) {
+    clone(realPath: string): void {
         if (!realPath) {
             throw new Error('Target path is required');
         }
 
-        // Create target directory if it doesn't exist
         if (!fs.existsSync(realPath)) {
             fs.mkdirSync(realPath, { recursive: true });
         }
 
-        // Export all children of root to the target directory
         for (const child of this.root.listChildren()) {
             const childRealPath = path.join(realPath, child.name);
             if (child.isFile()) {
@@ -385,11 +375,7 @@ class MemFS {
         }
     }
 
-    /**
-     * Seed the file system from a real filesystem directory or tar/tar.gz file
-     * Imports contents into the root directory
-     */
-    seed(sourcePath) {
+    seed(sourcePath: string): void {
         if (!sourcePath) {
             throw new Error('Source path is required');
         }
@@ -399,18 +385,15 @@ class MemFS {
         }
 
         const stats = fs.statSync(sourcePath);
-
         if (stats.isDirectory()) {
-            // Import directory contents into root
-            this._seedFromDirectory(sourcePath);
+            this.#seedFromDirectory(sourcePath);
         } else if (stats.isFile()) {
-            // Check file extension for tar/tar.gz
             const ext = path.extname(sourcePath).toLowerCase();
             const basename = path.basename(sourcePath, ext);
             const secondExt = path.extname(basename).toLowerCase();
 
             if (ext === '.tar' || (secondExt === '.tar' && ext === '.gz')) {
-                this._seedFromTar(sourcePath, ext === '.gz');
+                this.#seedFromTar(sourcePath);
             } else {
                 throw new Error('Unsupported file type. Only .tar and .tar.gz files are supported.');
             }
@@ -419,11 +402,17 @@ class MemFS {
         }
     }
 
-    /**
-     * Seed from a directory
-     * @private
-     */
-    _seedFromDirectory(dirPath) {
+    #normalizeStartNode(startNode?: MemNode | null): MemDirectory | null {
+        if (!startNode) {
+            return null;
+        }
+        if (startNode.isDirectory()) {
+            return startNode;
+        }
+        return startNode.parent ?? null;
+    }
+
+    #seedFromDirectory(dirPath: string, parent: MemDirectory = this.root): void {
         const entries = fs.readdirSync(dirPath, { withFileTypes: true });
 
         for (const entry of entries) {
@@ -431,53 +420,30 @@ class MemFS {
 
             if (entry.isFile()) {
                 const content = fs.readFileSync(entryPath, 'utf8');
-                const file = new MemFile(entry.name, content, this.root);
-                this.root.addChild(file);
+                const file = new MemFile(entry.name, content, parent);
+                parent.addChild(file);
             } else if (entry.isDirectory()) {
-                this._seedDirectoryRecursive(entryPath, this.root, entry.name);
+                const dir = new MemDirectory(entry.name, parent);
+                parent.addChild(dir);
+                this.#seedFromDirectory(entryPath, dir);
             }
         }
     }
 
-    /**
-     * Recursively seed a directory
-     * @private
-     */
-    _seedDirectoryRecursive(dirPath, parentNode, name) {
-        const dir = new MemDirectory(name, parentNode);
-        parentNode.addChild(dir);
-
-        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-
-        for (const entry of entries) {
-            const entryPath = path.join(dirPath, entry.name);
-
-            if (entry.isFile()) {
-                const content = fs.readFileSync(entryPath, 'utf8');
-                const file = new MemFile(entry.name, content, dir);
-                dir.addChild(file);
-            } else if (entry.isDirectory()) {
-                this._seedDirectoryRecursive(entryPath, dir, entry.name);
-            }
-        }
-    }
-
-    /**
-     * Seed from a tar or tar.gz file
-     * @private
-     */
-    _seedFromTar(tarPath, isGzipped) {
-        let tar;
+    #seedFromTar(tarPath: string): void {
+        let tar: typeof import('tar');
         try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
             tar = require('tar');
-        } catch (e) {
-            throw new Error('tar package is required for tar/tar.gz support. Install it with: npm install tar');
+        } catch (error) {
+            throw new Error(
+                'tar package is required for tar/tar.gz support. Install it with: npm install tar',
+            );
         }
 
-        const entries = [];
-        const fileContents = new Map();
+        const entries: TarEntry[] = [];
+        const fileContents = new Map<string, string>();
 
-        // Parse tar file and collect entries
         tar.t({
             file: tarPath,
             sync: true,
@@ -485,65 +451,66 @@ class MemFS {
                 entries.push({
                     path: entry.path,
                     type: entry.type,
-                    size: entry.size
+                    size: entry.size,
                 });
-            }
+            },
         });
 
-        // Extract file contents
         tar.x({
             file: tarPath,
             sync: true,
             cwd: '/tmp',
             onentry: (entry) => {
                 if (entry.type === 'File') {
-                    const chunks = [];
-                    entry.on('data', chunk => chunks.push(chunk));
+                    const chunks: Buffer[] = [];
+                    entry.on('data', (chunk: Buffer) => chunks.push(chunk));
                     entry.on('end', () => {
                         fileContents.set(entry.path, Buffer.concat(chunks).toString('utf8'));
                     });
                 }
-            }
+            },
         });
 
-        // Build file system structure
         for (const entry of entries) {
             const entryPath = entry.path;
-            const parts = entryPath.split('/').filter(p => p);
+            const parts = entryPath.split('/').filter((p) => p);
 
             if (entry.type === 'Directory') {
-                // Create directory structure
-                let current = this.root;
+                let current: MemDirectory = this.root;
                 for (const part of parts) {
                     let child = current.getChild(part);
                     if (!child) {
                         child = new MemDirectory(part, current);
                         current.addChild(child);
+                    }
+                    if (!child.isDirectory()) {
+                        throw new Error(`Unexpected file while creating directory: ${entryPath}`);
                     }
                     current = child;
                 }
             } else if (entry.type === 'File') {
-                // Create file
                 const fileName = parts.pop();
-                let current = this.root;
+                if (!fileName) {
+                    continue;
+                }
+                let current: MemDirectory = this.root;
 
-                // Ensure parent directories exist
                 for (const part of parts) {
                     let child = current.getChild(part);
                     if (!child) {
                         child = new MemDirectory(part, current);
                         current.addChild(child);
                     }
+                    if (!child.isDirectory()) {
+                        throw new Error(`Unexpected file in path: ${entryPath}`);
+                    }
                     current = child;
                 }
 
-                // Create file
-                const content = fileContents.get(entryPath) || '';
+                const content = fileContents.get(entryPath) ?? '';
                 const file = new MemFile(fileName, content, current);
                 current.addChild(file);
             }
         }
     }
 }
-
-module.exports = { MemFS, MemFile, MemDirectory, MemNode };
