@@ -1,5 +1,5 @@
 const { expect } = require('chai');
-const { tokenize, parsePipeline, parseHeredoc, parseInlineHeredoc, isInlineHeredoc } = require('../src/CommandParser');
+const { tokenize, parsePipeline, parseHeredoc, parseInlineHeredoc, isInlineHeredoc } = require('../lib/CommandParser');
 
 describe('CommandParser', () => {
     describe('tokenize', () => {
@@ -47,32 +47,38 @@ describe('CommandParser', () => {
     describe('parsePipeline', () => {
         it('should parse single command', () => {
             const pipeline = parsePipeline('cat file.txt');
-            expect(pipeline).to.deep.equal([['cat', 'file.txt']]);
+            expect(pipeline).to.have.lengthOf(1);
+            expect(pipeline[0].command).to.deep.equal(['cat', 'file.txt']);
+            expect(pipeline[0].type).to.equal('end');
         });
 
         it('should parse two commands with pipe', () => {
             const pipeline = parsePipeline('cat file.txt | grep error');
-            expect(pipeline).to.deep.equal([
-                ['cat', 'file.txt'],
-                ['grep', 'error']
-            ]);
+            expect(pipeline).to.have.lengthOf(2);
+            expect(pipeline[0].command).to.deep.equal(['cat', 'file.txt']);
+            expect(pipeline[0].type).to.equal('pipe');
+            expect(pipeline[1].command).to.deep.equal(['grep', 'error']);
+            expect(pipeline[1].type).to.equal('end');
         });
 
         it('should parse three commands with pipes', () => {
             const pipeline = parsePipeline('cat file.txt | grep error | sed s/a/b/g');
-            expect(pipeline).to.deep.equal([
-                ['cat', 'file.txt'],
-                ['grep', 'error'],
-                ['sed', 's/a/b/g']
-            ]);
+            expect(pipeline).to.have.lengthOf(3);
+            expect(pipeline[0].command).to.deep.equal(['cat', 'file.txt']);
+            expect(pipeline[0].type).to.equal('pipe');
+            expect(pipeline[1].command).to.deep.equal(['grep', 'error']);
+            expect(pipeline[1].type).to.equal('pipe');
+            expect(pipeline[2].command).to.deep.equal(['sed', 's/a/b/g']);
+            expect(pipeline[2].type).to.equal('end');
         });
 
         it('should handle quoted strings in pipeline', () => {
             const pipeline = parsePipeline('echo "hello world" | grep hello');
-            expect(pipeline).to.deep.equal([
-                ['echo', 'hello world'],
-                ['grep', 'hello']
-            ]);
+            expect(pipeline).to.have.lengthOf(2);
+            expect(pipeline[0].command).to.deep.equal(['echo', 'hello world']);
+            expect(pipeline[0].type).to.equal('pipe');
+            expect(pipeline[1].command).to.deep.equal(['grep', 'hello']);
+            expect(pipeline[1].type).to.equal('end');
         });
     });
 

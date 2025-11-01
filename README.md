@@ -960,10 +960,114 @@ console.log('Project files:', files);
 shell.exec('grep -n "TODO" $(find . --name "*.js")');
 ```
 
+## Development
+
+This project includes a comprehensive Makefile for common development tasks.
+
+### Quick Start for Developers
+
+```bash
+# Install dependencies
+make install
+
+# Build TypeScript
+make build
+
+# Run tests
+make test
+
+# Build and run quick tests
+make quick
+
+# Full CI pipeline
+make ci
+```
+
+### Available Make Targets
+
+Run `make help` to see all available targets:
+
+```bash
+make help
+```
+
+#### Build Commands
+- `make build` - Build TypeScript to JavaScript
+- `make clean` - Clean build artifacts
+- `make rebuild` - Clean and rebuild
+- `make watch` - Watch for changes and rebuild
+
+#### Testing Commands
+- `make test` - Run all tests
+- `make test-unit` - Run unit tests only (*.test.js)
+- `make test-all` - Run all tests including test_*.js files
+- `make test-watch` - Run tests in watch mode
+- `make test-coverage` - Run tests with coverage report
+
+#### Code Quality
+- `make check` - Type check without emitting files
+- `make lint` - Lint TypeScript files (requires ESLint)
+- `make format` - Format code with Prettier (requires Prettier)
+
+#### Development
+- `make dev` - Start development mode
+- `make repl` - Start memsh REPL
+- `make examples` - List available example files
+
+#### Release
+- `make version-patch` - Bump patch version (0.0.x)
+- `make version-minor` - Bump minor version (0.x.0)
+- `make version-major` - Bump major version (x.0.0)
+- `make prepublish` - Prepare for publishing (clean, build, test)
+- `make publish` - Publish to npm
+
+#### Utilities
+- `make info` - Show project information and statistics
+- `make verify` - Verify project setup
+- `make tree` - Show project structure
+
+#### Quick Commands
+- `make all` - Run full build pipeline (clean, install, build, test)
+- `make ci` - CI/CD pipeline (clean, build, test)
+- `make quick` - Quick build and test
+
+### Project Structure
+
+```
+utileejs/
+├── bin/              # CLI executables
+│   └── memsh
+├── examples/         # Example files
+│   └── *.js
+├── lib/              # Compiled TypeScript output (generated)
+│   └── *.js, *.d.ts, *.js.map
+├── src/              # TypeScript source files
+│   ├── ASTInterpreter.ts
+│   ├── CommandParser.ts
+│   ├── EventRouter.ts
+│   ├── JSEngine.ts
+│   ├── MemFS.ts
+│   ├── MemFSAdapter.ts
+│   ├── MemREPL.ts
+│   ├── MemShell.ts
+│   ├── MemTools.ts
+│   └── util.ts
+├── test/             # All test files
+│   ├── *.test.js     # Mocha test suites
+│   └── test_*.js     # Additional test files
+├── index.js          # Main entry point
+├── Makefile          # Build automation
+├── package.json      # Package configuration
+├── tsconfig.json     # TypeScript configuration
+└── README.md         # Documentation
+```
+
 ## Running Tests
 
 ```bash
 npm test
+# or
+make test
 ```
 
 ## Running Examples

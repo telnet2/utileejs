@@ -1,6 +1,6 @@
 const { expect } = require('chai');
-const { MemShell } = require('../src/MemShell');
-const { MemFS } = require('../src/MemFS');
+const { MemShell } = require('../lib/MemShell');
+const { MemFS } = require('../lib/MemFS');
 
 describe('MemShell - Shell Commands', () => {
     let shell;
@@ -210,21 +210,21 @@ describe('MemShell - Shell Commands', () => {
         });
 
         it('should filter by name pattern', () => {
-            const output = shell.exec('find a --name *.txt');
+            const output = shell.exec('find a -name *.txt');
             expect(output).to.include('file1.txt');
             expect(output).to.include('test.txt');
             expect(output).to.not.include('file2.js');
         });
 
         it('should filter by type (files only)', () => {
-            const output = shell.exec('find a --type f');
+            const output = shell.exec('find a -type f');
             expect(output).to.include('file1.txt');
             expect(output).to.include('file2.js');
             expect(output).to.not.include('/a/b\n'); // directory
         });
 
         it('should filter by type (directories only)', () => {
-            const output = shell.exec('find a --type d');
+            const output = shell.exec('find a -type d');
             expect(output).to.include('/a');
             expect(output).to.include('/a/b');
             expect(output).to.not.include('file1.txt');
@@ -238,9 +238,9 @@ describe('MemShell - Shell Commands', () => {
             expect(output).to.equal('Hello Universe');
         });
 
-        it('should modify file in-place by default', () => {
+        it('should modify file in-place with -i flag', () => {
             shell.fs.createFile('test.txt', 'foo bar foo');
-            shell.exec('sed s/foo/baz/g test.txt');
+            shell.exec('sed -i s/foo/baz/g test.txt');
             const content = shell.fs.resolvePath('test.txt').read();
             expect(content).to.equal('baz bar baz');
         });

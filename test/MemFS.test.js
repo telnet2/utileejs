@@ -1,5 +1,5 @@
 const { expect } = require('chai');
-const { MemFS, MemFile, MemDirectory } = require('../src/MemFS');
+const { MemFS, MemFile, MemDirectory } = require('../lib/MemFS');
 const realFs = require('fs');
 const path = require('path');
 const os = require('os');

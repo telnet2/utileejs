@@ -1,6 +1,6 @@
 const { expect } = require('chai');
-const { MemTools } = require('../src/MemTools');
-const { MemFS } = require('../src/MemFS');
+const { MemTools } = require('../lib/MemTools');
+const { MemFS } = require('../lib/MemFS');
 
 describe('MemTools - LLM Tool Interface', () => {
     let memtools;
@@ -211,7 +211,7 @@ EOF`;
             memtools.importState(state);
 
             // Verify structure
-            const files = memtools.exec('find . --type f');
+            const files = memtools.exec('find . -type f');
             expect(files).to.include('src/index.js');
             expect(files).to.include('src/components/Button.js');
             expect(files).to.include('tests/unit/test.js');
@@ -296,7 +296,7 @@ EOF`);
             memtools.exec('cat > src/index.js << EOF\nconsole.log("App");\nEOF');
             memtools.exec('cat > README.md << EOF\n# My App\nEOF');
 
-            const files = memtools.exec('find . --type f');
+            const files = memtools.exec('find . -type f');
             expect(files).to.include('package.json');
             expect(files).to.include('src/index.js');
             expect(files).to.include('README.md');
