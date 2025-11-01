@@ -23,6 +23,7 @@ Available commands:
 - File operations: ls, cat, touch, rm, write
 - Directory operations: pwd, cd, mkdir
 - Text processing: echo, grep, sed, diff, patch, find
+- Utilities: date
 - I/O: import, export (between MemFS and real filesystem)
 - Execution: node (sandboxed JavaScript execution)
 
@@ -31,12 +32,14 @@ The filesystem supports:
 - Redirections: cmd > file, cmd >> file, cmd << EOF
 - Operators: cmd1 && cmd2, cmd1 || cmd2, cmd1 ; cmd2
 - Wildcards: *.txt, file?.js
+- Command substitution: $(command) - replaces with command output
 
 Best practices:
 1. Use 'ls' and 'cat' to verify your work
 2. Break complex tasks into steps
 3. Check command output before proceeding
-4. Provide a summary when complete
+4. Use command substitution for dynamic values: echo "Today is $(date)"
+5. Provide a summary when complete
 
 When you finish the task, provide a clear summary of what you accomplished.`;
 

@@ -532,6 +532,86 @@ export class MemShell {
     }
 
     /**
+     * date - display or set the date and time
+     */
+    date(args: string[]): string {
+        const parser = new ArgumentParser({
+            prog: 'date',
+            description: 'Display or set date and time',
+            add_help: true
+        });
+
+        parser.add_argument('-u', '--utc', {
+            action: 'store_true',
+            help: 'Display UTC time'
+        });
+        parser.add_argument('-I', '--iso-8601', {
+            action: 'store_true',
+            dest: 'iso',
+            help: 'Output ISO 8601 format'
+        });
+        parser.add_argument('-R', '--rfc-email', {
+            action: 'store_true',
+            dest: 'rfc',
+            help: 'Output RFC 5322 format'
+        });
+        parser.add_argument('format', {
+            nargs: '?',
+            help: 'Output format string (e.g., +%Y-%m-%d)'
+        });
+
+        const parsed = this.parseArgsWithHelp(parser, args);
+        if (typeof parsed === 'string') return parsed; // Help text
+
+        const now = new Date();
+
+        // ISO 8601 format
+        if (parsed.iso) {
+            return now.toISOString();
+        }
+
+        // RFC 5322 format
+        if (parsed.rfc) {
+            return now.toUTCString();
+        }
+
+        // Custom format string (simplified, supports common patterns)
+        if (parsed.format && parsed.format.startsWith('+')) {
+            const format = parsed.format.substring(1);
+            let result = format;
+
+            // Common format specifiers
+            const replacements: Record<string, string> = {
+                '%Y': now.getFullYear().toString(),
+                '%m': (now.getMonth() + 1).toString().padStart(2, '0'),
+                '%d': now.getDate().toString().padStart(2, '0'),
+                '%H': now.getHours().toString().padStart(2, '0'),
+                '%M': now.getMinutes().toString().padStart(2, '0'),
+                '%S': now.getSeconds().toString().padStart(2, '0'),
+                '%a': ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][now.getDay()],
+                '%A': ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()],
+                '%b': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][now.getMonth()],
+                '%B': ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][now.getMonth()],
+                '%s': Math.floor(now.getTime() / 1000).toString(), // Unix timestamp
+            };
+
+            for (const [pattern, value] of Object.entries(replacements)) {
+                result = result.replace(new RegExp(pattern, 'g'), value);
+            }
+
+            return result;
+        }
+
+        // Default format (similar to Unix date)
+        if (parsed.utc) {
+            return now.toUTCString();
+        }
+
+        // Default local format
+        return now.toString();
+    }
+
+    /**
      * diff - compare files line by line (POSIX-compliant)
      * Supports: -u (unified), -c (context), -q (brief), -i, -w, -b, -B
      */
@@ -1965,6 +2045,7 @@ export class MemShell {
             touch: this.touch.bind(this),
             rm: this.rm.bind(this),
             echo: this.echo.bind(this),
+            date: this.date.bind(this),
             diff: this.diff.bind(this),
             grep: this.grep.bind(this),
             find: this.find.bind(this),
@@ -2119,11 +2200,107 @@ export class MemShell {
     }
 
     /**
+     * Expand command substitutions $(command) in a string
+     * Handles nested substitutions by processing from innermost to outermost
+     */
+    expandCommandSubstitutions(commandLine: string, depth: number = 0): string {
+        // Prevent infinite recursion
+        if (depth > 10) {
+            return commandLine;
+        }
+
+        let result = commandLine;
+        let hasSubstitution = true;
+
+        // Keep expanding until no more substitutions are found
+        while (hasSubstitution) {
+            hasSubstitution = false;
+            let i = 0;
+
+            while (i < result.length) {
+                // Look for $( pattern
+                if (result[i] === '$' && result[i + 1] === '(') {
+                    // Find the matching closing parenthesis
+                    let depth = 1;
+                    let j = i + 2;
+
+                    while (j < result.length && depth > 0) {
+                        if (result[j] === '(') depth++;
+                        else if (result[j] === ')') depth--;
+                        j++;
+                    }
+
+                    if (depth === 0) {
+                        // Found a complete substitution
+                        const command = result.substring(i + 2, j - 1);
+
+                        try {
+                            // Execute the command (without expanding substitutions again to avoid infinite loop)
+                            // We'll handle this by tracking depth
+                            let output: string;
+
+                            // Check if the command itself has substitutions
+                            if (command.includes('$(')) {
+                                // Recursively expand nested substitutions first
+                                const expandedCommand = this.expandCommandSubstitutions(command, depth + 1);
+                                output = this.execWithoutSubstitution(expandedCommand);
+                            } else {
+                                output = this.execWithoutSubstitution(command);
+                            }
+
+                            // Remove trailing newline for substitution
+                            output = output.replace(/\n$/, '');
+
+                            // Replace the substitution with the output
+                            result = result.substring(0, i) + output + result.substring(j);
+                            hasSubstitution = true;
+
+                            // Continue from where we inserted the output
+                            i = i + output.length;
+                        } catch (err: any) {
+                            // If command fails, replace with empty string
+                            result = result.substring(0, i) + result.substring(j);
+                            hasSubstitution = true;
+                        }
+                    } else {
+                        // Unmatched parenthesis, skip
+                        i++;
+                    }
+                } else {
+                    i++;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Execute a command without expanding command substitutions
+     * Used internally by expandCommandSubstitutions to avoid infinite recursion
+     */
+    private execWithoutSubstitution(commandLine: string): string {
+        return this.execInternal(commandLine, false);
+    }
+
+    /**
      * Execute a command
      */
     exec(commandLine: string): string {
+        return this.execInternal(commandLine, true);
+    }
+
+    /**
+     * Internal execute method with optional substitution expansion
+     */
+    private execInternal(commandLine: string, expandSubstitutions: boolean): string {
         if (!commandLine || !commandLine.trim()) {
             return '';
+        }
+
+        // Expand command substitutions $(...)
+        if (expandSubstitutions) {
+            commandLine = this.expandCommandSubstitutions(commandLine);
         }
 
         // Check for inline HEREDOC first (before tokenization)
