@@ -6,8 +6,8 @@
  */
 
 import React, { useState } from 'react';
-import { FormBuilder } from '../../src/form-builder';
-import '../../src/form-builder/styles/form-builder.css';
+import { FormBuilder } from '../form-builder';
+import '../form-builder/styles/form-builder.css';
 import { personEmploymentSchema } from './schema';
 import { personEmploymentUISchema } from './uischema';
 import styles from './page.module.css';

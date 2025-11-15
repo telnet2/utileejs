@@ -12,9 +12,9 @@
  * - Rules for conditional rendering
  */
 
-import { UISchema } from '../../src/form-builder/types';
+import type { UISchemaVerticalLayout } from '../form-builder/types';
 
-export const personEmploymentUISchema: UISchema = {
+export const personEmploymentUISchema: UISchemaVerticalLayout = {
   type: 'VerticalLayout',
   elements: [
     // Person Info Section (Full Width Header)
@@ -116,9 +116,9 @@ export const personEmploymentUISchema: UISchema = {
               ],
             },
           ],
-        },
+        } as any,
       ],
-    },
+    } as any,
 
     // Employment Section
     {
@@ -171,7 +171,7 @@ export const personEmploymentUISchema: UISchema = {
               span: 1,
             },
           ],
-        },
+        } as any,
         {
           type: 'GridLayout',
           columns: 3,
@@ -208,7 +208,7 @@ export const personEmploymentUISchema: UISchema = {
               span: 1,
             },
           ],
-        },
+        } as any,
 
         // Education fields (shown when job_type === 'education')
         {
@@ -246,7 +246,7 @@ export const personEmploymentUISchema: UISchema = {
               span: 1,
             },
           ],
-        },
+        } as any,
         {
           type: 'Control',
           scope: '#/properties/employment/properties/title',
@@ -295,7 +295,7 @@ export const personEmploymentUISchema: UISchema = {
               span: 1,
             },
           ],
-        },
+        } as any,
 
         // Other fields (shown when job_type === 'other')
         {
@@ -315,6 +315,6 @@ export const personEmploymentUISchema: UISchema = {
           },
         },
       ],
-    },
+    } as any,
   ],
 };
