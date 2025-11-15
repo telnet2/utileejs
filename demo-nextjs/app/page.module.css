@@ -1,0 +1,270 @@
+.container {
+  min-height: 100vh;
+  padding: 0;
+  margin: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.header {
+  background: white;
+  padding: 2rem;
+  text-align: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 2.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.subtitle {
+  margin: 0.5rem 0 0 0;
+  color: #6b7280;
+  font-size: 1.125rem;
+}
+
+.main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.intro {
+  background: white;
+  border-radius: 0.5rem;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.intro h2 {
+  margin-top: 0;
+  color: #1f2937;
+}
+
+.intro ul {
+  line-height: 1.8;
+  color: #4b5563;
+}
+
+.intro strong {
+  color: #3b82f6;
+}
+
+.formContainer {
+  background: white;
+  border-radius: 0.5rem;
+  padding: 2rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+}
+
+.actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid #e5e7eb;
+  flex-wrap: wrap;
+}
+
+.submitButton,
+.resetButton,
+.toggleButton {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 1;
+  min-width: 150px;
+}
+
+.submitButton {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.submitButton:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.resetButton {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.resetButton:hover {
+  background: #e5e7eb;
+}
+
+.toggleButton {
+  background: #3b82f6;
+  color: white;
+}
+
+.toggleButton:hover {
+  background: #2563eb;
+}
+
+.dataPreview,
+.submittedData {
+  background: white;
+  border-radius: 0.5rem;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.dataPreview h3,
+.submittedData h3 {
+  margin-top: 0;
+  color: #1f2937;
+}
+
+.dataPreview pre,
+.submittedData pre {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.375rem;
+  padding: 1rem;
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.submittedData {
+  background: #ecfdf5;
+  border: 2px solid #10b981;
+}
+
+.submittedData h3 {
+  color: #059669;
+}
+
+.schemaInfo {
+  background: white;
+  border-radius: 0.5rem;
+  padding: 2rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+}
+
+.schemaInfo details {
+  margin-bottom: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.375rem;
+  padding: 1rem;
+}
+
+.schemaInfo summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #3b82f6;
+  user-select: none;
+}
+
+.schemaInfo summary:hover {
+  color: #2563eb;
+}
+
+.schemaInfo pre {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.375rem;
+  padding: 1rem;
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin-top: 1rem;
+}
+
+.translationNotes {
+  margin-top: 1rem;
+}
+
+.translationNotes h4 {
+  margin-top: 0;
+  color: #1f2937;
+}
+
+.translationNotes table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.translationNotes th,
+.translationNotes td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.translationNotes th {
+  background: #f9fafb;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.translationNotes code {
+  background: #f3f4f6;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  color: #3b82f6;
+}
+
+.footer {
+  background: white;
+  padding: 2rem;
+  text-align: center;
+  margin-top: 4rem;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.footer p {
+  margin: 0;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #3b82f6;
+}
+
+@media (max-width: 768px) {
+  .header h1 {
+    font-size: 2rem;
+  }
+
+  .subtitle {
+    font-size: 1rem;
+  }
+
+  .main {
+    padding: 1rem;
+  }
+
+  .intro,
+  .formContainer,
+  .schemaInfo {
+    padding: 1.5rem;
+  }
+
+  .actions {
+    flex-direction: column;
+  }
+
+  .submitButton,
+  .resetButton,
+  .toggleButton {
+    width: 100%;
+  }
+}
