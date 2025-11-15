@@ -1,27 +1,48 @@
 {
     "name": "@autox/utileejs",
-    "version": "0.0.7",
-    "description": "Useful JS utilities",
+    "version": "0.0.8",
+    "description": "Useful JS utilities including a powerful React Form Builder based on JSON Schema",
     "main": "index.js",
+    "types": "lib/index.d.ts",
     "files": [
         "index.js",
-        "lib"
+        "lib",
+        "src/form-builder"
     ],
     "repository": "git@github.com:telnet2/utileejs.git",
     "author": "Joohwi Lee <telnet2@gmail.com>",
     "license": "EPL-2.0",
+    "keywords": [
+        "form",
+        "form-builder",
+        "json-schema",
+        "react",
+        "typescript",
+        "validation",
+        "ui-schema",
+        "nextjs"
+    ],
+    "peerDependencies": {
+        "react": "^16.8.0 || ^17.0.0 || ^18.0.0",
+        "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0"
+    },
     "dependencies": {
         "eventemitter3": "^3.1.0"
     },
     "devDependencies": {
+        "@types/react": "^18.2.0",
+        "@types/react-dom": "^18.2.0",
         "babel-cli": "^6.26.0",
         "babel-preset-env": "^1.7.0",
         "chai": "^4.1.2",
         "mocha": "^5.2.0",
         "mocha-logger": "^1.0.6",
-        "typescript": "^3.0.1"
+        "typescript": "^5.3.0"
     },
     "scripts": {
-        "build": "npx babel src -d lib --minified"
+        "build": "npm run build:js && npm run build:ts",
+        "build:js": "npx babel src -d lib --minified --ignore '**/*.ts,**/*.tsx'",
+        "build:ts": "tsc --project tsconfig.json",
+        "test": "mocha"
     }
 }
